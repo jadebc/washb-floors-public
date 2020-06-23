@@ -1,0 +1,320 @@
+
+R version 3.6.1 (2019-07-05) -- "Action of the Toes"
+Copyright (C) 2019 The R Foundation for Statistical Computing
+Platform: x86_64-apple-darwin15.6.0 (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> #######################################
+> # WASH Benefits STH finished floor analysis
+> 
+> # distributions of EPG and Cq values
+> # by flooring status as box plots
+> # and table of relative reduction in Cq values
+> #######################################
+> rm(list=ls())
+> 
+> # configure directories, load libraries and base functions
+> source(paste0(here::here(), "/0-config.R"))
+here() starts at /Users/jadederong/Documents/CRG/wash-benefits/washb-floors-public
+
+Attaching package: ‘dplyr’
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+
+Attaching package: ‘reshape2’
+
+The following object is masked from ‘package:tidyr’:
+
+    smiths
+
+
+Attaching package: ‘gridExtra’
+
+The following object is masked from ‘package:dplyr’:
+
+    combine
+
+Welcome to the washb package
+Version: 0.2.2
+Created on 2018-11-07
+
+This software was developed with funding from the
+Bill & Melinda Gates Foundation (grant number OPPGD759).
+
+The package's reference manual and vignette are also online:
+https://ben-arnold.github.io/washb
+
+Loading required package: nnls
+Super Learner
+Version: 2.0-24
+Package created on 2018-08-10
+
+Loading required package: zoo
+
+Attaching package: ‘zoo’
+
+The following objects are masked from ‘package:base’:
+
+    as.Date, as.Date.numeric
+
+Loading required package: splines
+Loading required package: foreach
+Loaded gam 1.16.1
+
+Loading required package: Matrix
+
+Attaching package: ‘Matrix’
+
+The following objects are masked from ‘package:tidyr’:
+
+    expand, pack, unpack
+
+Loaded glmnet 2.0-18
+
+Loading required package: MASS
+
+Attaching package: ‘MASS’
+
+The following object is masked from ‘package:dplyr’:
+
+    select
+
+Loading required package: lme4
+
+arm (Version 1.10-1, built: 2018-4-12)
+
+Working directory is /Users/jadederong/Documents/CRG/wash-benefits/washb-floors-public/2-figure-scripts
+
+
+Attaching package: ‘arm’
+
+The following object is masked from ‘package:scales’:
+
+    rescale
+
+
+Attaching package: ‘plotly’
+
+The following object is masked from ‘package:MASS’:
+
+    select
+
+The following object is masked from ‘package:ggplot2’:
+
+    last_plot
+
+The following object is masked from ‘package:stats’:
+
+    filter
+
+The following object is masked from ‘package:graphics’:
+
+    layout
+
+
+Attaching package: ‘data.table’
+
+The following objects are masked from ‘package:reshape2’:
+
+    dcast, melt
+
+The following objects are masked from ‘package:dplyr’:
+
+    between, first, last
+
+── Attaching packages ─────────────────────────────────────── tidyverse 1.3.0 ──
+✔ tibble  2.1.3     ✔ stringr 1.4.0
+✔ readr   1.3.1     ✔ forcats 0.4.0
+✔ purrr   0.3.3     
+── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+✖ purrr::accumulate()   masks foreach::accumulate()
+✖ data.table::between() masks dplyr::between()
+✖ readr::col_factor()   masks scales::col_factor()
+✖ gridExtra::combine()  masks dplyr::combine()
+✖ purrr::discard()      masks scales::discard()
+✖ Matrix::expand()      masks tidyr::expand()
+✖ plotly::filter()      masks dplyr::filter(), stats::filter()
+✖ data.table::first()   masks dplyr::first()
+✖ dplyr::lag()          masks stats::lag()
+✖ data.table::last()    masks dplyr::last()
+✖ Matrix::pack()        masks tidyr::pack()
+✖ plotly::select()      masks MASS::select(), dplyr::select()
+✖ purrr::transpose()    masks data.table::transpose()
+✖ Matrix::unpack()      masks tidyr::unpack()
+✖ purrr::when()         masks foreach::when()
+
+Attaching package: ‘assertthat’
+
+The following object is masked from ‘package:tibble’:
+
+    has_name
+
+Welcome to the tmle package, version 1.3.0-2
+
+Use tmleNews() to see details on changes and bug fixes
+> 
+> # load data
+> bd <- readRDS(clean_bdata_path)
+> ke <- readRDS(clean_kdata_path)
+> 
+> bd = bd %>% mutate(floor = factor(ifelse(floor == 1, "Finished floor", "Unfinished floor")))
+> ke = ke %>% mutate(floor = factor(ifelse(floor == 1, "Finished floor", "Unfinished floor")))
+> 
+> #--------------------------------------
+> # process analysis results
+> #--------------------------------------
+> results = readRDS(fecr_results_path) %>%
++   rename(outcome = yname) %>% 
++   add_species_names() %>%
++   add_diagnostic() %>%
++   mutate(outcome_f = factor(outcome_f, levels = c(
++     "G. duodenalis", "T. trichiura",
++     "Hookworm", "N. americanus",  "A. ceylanicum",
++     "A. lumbricoides"
++   ))) 
+> 
+> results = results %>% filter(diagnostic=="qPCR" & label=="Main" & fit=="GLM") 
+> 
+> results$result = pt.est.ci.f(mean = results$psi,
++                              lb = results$lb, 
++                              ub = results$ub,
++                              digits = 2,
++                              scale=1) 
+> 
+> results = results %>% dplyr::select(country, analysis, outcome_f, N, 
++                                     analysis, result)
+> 
+> results_w = pivot_wider(results, names_from = c(analysis), values_from = c(result))
+> #change -0.00 to 0.00
+> results_w$Adjusted[results_w$Adjusted == "-0.00 (-0.03, 0.03)"] <- "0.00 (-0.03, 0.03)"
+> results_w$Adjusted[results_w$Adjusted == "0.11 (-0.00, 0.22)"] <- "0.11 (0.00, 0.22)"
+> results_w$Unadjusted[results_w$Unadjusted == "-0.00 (-0.07, 0.06)"] <- "0.00 (-0.07, 0.06)"
+> results_w$N = format(results_w$N, big.mark = ",")
+> 
+> #--------------------------------------
+> # qPCR
+> #--------------------------------------
+> b_q_plot_df = bd %>% select(floor, CTmean.Al, CTmean.Na, CTmean.Ad, CTmean.Ac, CTmean.Tt, ctgi) %>%
++   mutate(country = "Bangladesh")
+> 
+> k_q_plot_df = ke %>% select(floor, al_qpcr, na_qpcr, tt_qpcr) %>% mutate(country = "Kenya") %>% 
++   filter(!is.na(floor))
+> 
+> q_plot_df = bind_rows(b_q_plot_df, k_q_plot_df)
+> 
+> q_plot_df_l = melt(q_plot_df, id.vars = c("floor", "country")) %>%
++   mutate(label = case_when(
++     country == "Bangladesh" & variable == "CTmean.Al" ~ "A. lumbricoides",
++     country == "Bangladesh" & variable == "CTmean.Na" ~ "N. americanus",
++     country == "Bangladesh" & variable == "CTmean.Ac" ~ "A. ceylanicum",
++     country == "Bangladesh" & variable == "CTmean.Tt" ~ "T. trichiura",
++     country == "Bangladesh" & variable == "ctgi" ~ "G. duodenalis",
++     country == "Kenya" & variable == "al_qpcr" ~ "A. lumbricoides",
++     country == "Kenya" & variable == "na_qpcr" ~ "N. americanus",
++     country == "Kenya" & variable == "tt_qpcr" ~ "T. trichiura"
++     
++   )) %>%
++   mutate(label = factor(label, levels = c(
++     "G. duodenalis",
++     "T. trichiura",
++     "N. americanus",
++     "A. ceylanicum",
++     "A. lumbricoides"
++   ))) %>%
++   filter(!is.na(value)) %>%
++   filter(variable!="CTmean.Ad") %>%
++   mutate(floor = factor(floor, levels = c("Unfinished floor", "Finished floor")))
+> 
+>   
+> q_plot_b = ggplot(q_plot_df_l %>% filter(country=="Bangladesh"), aes(x = label, y = value)) +
++   geom_boxplot(aes(fill = floor), width = 0.5, position=position_dodge(0.6)) +
++   scale_fill_manual("", values = c("#B06D49", "#D2D4D6")) + 
++   theme_bw() + xlab("") + ylab("") +
++   theme(legend.position = "none", text = element_text(size=16)) +
++   facet_wrap(~country) +
++   scale_x_discrete(labels=make_italic) +
++   scale_y_continuous(limits = c(15,40), labels = seq(15,40,5), breaks = seq(15,40,5)) + 
++   theme(plot.margin = unit(c(0.2,0,0,0.25), "cm"),
++         strip.text.x = element_text(size=12),
++         axis.text.y = element_text(size = 12),
++         legend.text=element_text(size=12)) +
++   coord_flip()
+> q_plot_b
+Warning message:
+Removed 8 rows containing non-finite values (stat_boxplot). 
+> 
+> q_plot_k = ggplot(q_plot_df_l %>% filter(country=="Kenya"), aes(x = label, y = value)) +
++   geom_boxplot(aes(fill = floor), width = 0.5, position=position_dodge(0.6)) +
++   scale_fill_manual("", values = c("#B06D49", "#D2D4D6")) + 
++   theme_bw() + xlab("") + ylab("Mean Cq value") +
++   theme(legend.position = "bottom", text = element_text(size=16),
++         strip.text.x = element_text(size=12),
++         axis.text.y = element_text(size = 12),
++         axis.title=element_text(size=12),
++         legend.text=element_text(size=12)) +
++   scale_x_discrete(labels=make_italic) +
++   scale_y_continuous(limits = c(15,40), labels = seq(15,40,5), breaks = seq(15,40,5)) + 
++   facet_wrap(~country) +
++   coord_flip()
+> q_plot_k
+Warning message:
+Removed 2 rows containing non-finite values (stat_boxplot). 
+> 
+> #define tableGrob theme
+> my_theme <- ttheme_minimal(
++   core=list(fg_params=list(cex = 0.75)),
++   colhead=list(fg_params=list(cex = 0.8))
++ )
+> 
+> #Bangladesh
+> q_table_b = results_w %>% 
++   filter(country == "Bangladesh") %>%
++   select("N", "Unadjusted", "Adjusted") %>%
++   rbind(c("", "", ""))
+> 
+> bangladesh_table = tableGrob(q_table_b, theme = my_theme,
++               rows = NULL, cols = c("N", "Unadjusted Cq Reduction\n(95% CI)",
++                                     "Adjusted Cq Reduction\n(95% CI)"))
+> bangladesh_table$heights <- unit(c(0.1, rep(0.147, nrow(bangladesh_table) - 2), 0.12), "npc")
+> 
+> #Kenya
+> q_table_k = results_w %>% 
++   filter(country == "Kenya") %>%
++   select("N", "Unadjusted", "Adjusted") %>%
++   rbind(c("", "", ""))
+> 
+> kenya_table = tableGrob(q_table_k, theme = my_theme,
++               rows = NULL, cols = c("N", "Unadjusted Cq Reduction\n(95% CI)", "Adjusted Cq Reduction\n(95% CI)"))
+> 
+> kenya_table$heights <- unit(c(0.12, rep(0.17, nrow(kenya_table) - 2), 0.35), "npc")
+> 
+> combined_plot = grid.arrange(q_plot_b, bangladesh_table, q_plot_k, kenya_table, ncol = 2, heights = c(4.2,4))
+Warning messages:
+1: Removed 8 rows containing non-finite values (stat_boxplot). 
+2: Removed 2 rows containing non-finite values (stat_boxplot). 
+> 
+> ggsave(filename = paste0(fig_path, "/plot_table_box_plot_qpcr.png"), plot = combined_plot, width = 8, height = 6.5)
+> 
+> proc.time()
+   user  system elapsed 
+  7.468   0.645  29.366 

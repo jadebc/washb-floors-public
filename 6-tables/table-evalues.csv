@@ -1,0 +1,16 @@
+"country","outcome_f","diagnostic","eval","eval_ci"
+"Bangladesh","Hookworm","Kato-Katz",2.42818814738264,1
+"Bangladesh","T. trichiura","Kato-Katz",2.92877549146284,1.25172645346924
+"Bangladesh","A. ceylanicum","qPCR",2.58136143080611,1
+"Bangladesh","A. lumbricoides","qPCR",5.2843095818236,1.79155050148771
+"Bangladesh","N. americanus","qPCR",3.24478756025965,1.31101990270615
+"Bangladesh","T. trichiura","qPCR",1.34293264984875,1
+"Bangladesh","Any STH","qPCR",2.09785400308543,1
+"Bangladesh","G. duodenalis","qPCR",1.8773158217612,1.28375528045148
+"Kenya","A. lumbricoides","Kato-Katz",2.26666084221725,1.3520337647344
+"Kenya","Any STH","Kato-Katz",2.39562589426387,1.52711776224178
+"Kenya","A. lumbricoides","qPCR",2.64855424780373,1.19829380168013
+"Kenya","N. americanus","qPCR",2.23583630646422,1
+"Kenya","T. trichiura","qPCR",4.65779583771802,1
+"Kenya","Any STH","qPCR",2.89839212684979,1.52441544056643
+"Kenya","G. duodenalis","qPCR",1.71959894587418,1.22609574573997

@@ -1,0 +1,3558 @@
+
+R version 3.6.1 (2019-07-05) -- "Action of the Toes"
+Copyright (C) 2019 The R Foundation for Statistical Computing
+Platform: x86_64-apple-darwin15.6.0 (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> #######################################
+> # WASH Benefits STH finished floor analysis
+> 
+> # fit glm and tmle to estimate association
+> # between improved floors and STH/giardia
+> 
+> # analysis using quantitive measures of 
+> # infection intensity
+> #######################################
+> 
+> rm(list=ls())
+> 
+> # configure directories, load libraries and base functions
+> source(paste0(here::here(), "/0-config.R"))
+here() starts at /Users/jadederong/Documents/CRG/wash-benefits/washb-floors-public
+
+Attaching package: ‘dplyr’
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+
+Attaching package: ‘reshape2’
+
+The following object is masked from ‘package:tidyr’:
+
+    smiths
+
+
+Attaching package: ‘gridExtra’
+
+The following object is masked from ‘package:dplyr’:
+
+    combine
+
+Welcome to the washb package
+Version: 0.2.2
+Created on 2018-11-07
+
+This software was developed with funding from the
+Bill & Melinda Gates Foundation (grant number OPPGD759).
+
+The package's reference manual and vignette are also online:
+https://ben-arnold.github.io/washb
+
+Loading required package: nnls
+Super Learner
+Version: 2.0-24
+Package created on 2018-08-10
+
+Loading required package: zoo
+
+Attaching package: ‘zoo’
+
+The following objects are masked from ‘package:base’:
+
+    as.Date, as.Date.numeric
+
+Loading required package: splines
+Loading required package: foreach
+Loaded gam 1.16.1
+
+Loading required package: Matrix
+
+Attaching package: ‘Matrix’
+
+The following objects are masked from ‘package:tidyr’:
+
+    expand, pack, unpack
+
+Loaded glmnet 2.0-18
+
+Loading required package: MASS
+
+Attaching package: ‘MASS’
+
+The following object is masked from ‘package:dplyr’:
+
+    select
+
+Loading required package: lme4
+
+arm (Version 1.10-1, built: 2018-4-12)
+
+Working directory is /Users/jadederong/Documents/CRG/wash-benefits/washb-floors-public/1-analysis
+
+
+Attaching package: ‘arm’
+
+The following object is masked from ‘package:scales’:
+
+    rescale
+
+
+Attaching package: ‘plotly’
+
+The following object is masked from ‘package:MASS’:
+
+    select
+
+The following object is masked from ‘package:ggplot2’:
+
+    last_plot
+
+The following object is masked from ‘package:stats’:
+
+    filter
+
+The following object is masked from ‘package:graphics’:
+
+    layout
+
+
+Attaching package: ‘data.table’
+
+The following objects are masked from ‘package:reshape2’:
+
+    dcast, melt
+
+The following objects are masked from ‘package:dplyr’:
+
+    between, first, last
+
+── Attaching packages ─────────────────────────────────────── tidyverse 1.3.0 ──
+✔ tibble  2.1.3     ✔ stringr 1.4.0
+✔ readr   1.3.1     ✔ forcats 0.4.0
+✔ purrr   0.3.3     
+── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+✖ purrr::accumulate()   masks foreach::accumulate()
+✖ data.table::between() masks dplyr::between()
+✖ readr::col_factor()   masks scales::col_factor()
+✖ gridExtra::combine()  masks dplyr::combine()
+✖ purrr::discard()      masks scales::discard()
+✖ Matrix::expand()      masks tidyr::expand()
+✖ plotly::filter()      masks dplyr::filter(), stats::filter()
+✖ data.table::first()   masks dplyr::first()
+✖ dplyr::lag()          masks stats::lag()
+✖ data.table::last()    masks dplyr::last()
+✖ Matrix::pack()        masks tidyr::pack()
+✖ plotly::select()      masks MASS::select(), dplyr::select()
+✖ purrr::transpose()    masks data.table::transpose()
+✖ Matrix::unpack()      masks tidyr::unpack()
+✖ purrr::when()         masks foreach::when()
+
+Attaching package: ‘assertthat’
+
+The following object is masked from ‘package:tibble’:
+
+    has_name
+
+Welcome to the tmle package, version 1.3.0-2
+
+Use tmleNews() to see details on changes and bug fixes
+> 
+> # load data
+> bd <- readRDS(clean_bdata_path)
+> ke <- readRDS(clean_kdata_path)
+> 
+> # -------- Bangladesh -------- 
+> bd = bd %>% mutate(floor = factor(ifelse(floor == 1, "Improved floor", "Unimproved floor")))
+> 
+> bd = bd %>% mutate(
++   hwepg = ifelse(hwkk==0, NA, hwepg),
++   ttepg = ifelse(ttkk==0, NA, ttepg),
++   ctgi = ifelse(posgi==0, NA, ctgi)
++   )
+> 
+> # -------- Kenya -------- 
+> ke = ke %>%
++   filter(floor!=9) %>%
++   mutate(floor = factor(ifelse(floor == 1, "Improved floor", "Unimproved floor")))
+> 
+> ke = ke %>% mutate(
++   asca_epg = ifelse(ascaris_yn==0, NA, asca_epg)
++ )
+> 
+> #-------------------------------------------------------------------------------
+> # Lists of outcomes and covariates
+> #-------------------------------------------------------------------------------
+> # outcome list for Bangladesh
+> b_ylist = list("CTmean.Al", "CTmean.Ac", "CTmean.Na", "CTmean.Tt",
++                "hwepg", "ttepg", "ctgi")
+> 
+> # covariate list for Bangladesh
+> bd_Ws <- c("month","aged","sex","birthord","momage","momedu","momheight","Nlt18","Ncomp","hfiacat","elec","asset_wardrobe","asset_table","asset_chair","asset_khat","asset_chouki","asset_tv","asset_refrig","asset_bike","asset_moto","asset_sewmach","asset_mobile","tr")
+> 
+> # kenya doesn't have birth order
+> k_ylist = list("asca_epg", "al_qpcr", "na_qpcr", "tt_qpcr")
+> 
+> ke_Ws <- c("month","childage_sth","sex","momage","momedu","momheight","Nlt18","Ncomp","HHS",
++            "electricity", "radio", "television", "mobile", "clock", "bicycle",
++            "motorcycle", "stove", "gascook","tr")
+> 
+> #-------------------------------------------------------------------------------
+> # Fit GLM
+> #-------------------------------------------------------------------------------
+> # Bangladesh
+> b_glm_results_list = lapply(b_ylist, function(x) 
++   fit_glm(yname = x, data = bd, country = "Bangladesh", FECR = TRUE,
++           Ws = bd_Ws, label = "Main")
++ )
+[1] "CTmean.Al"
+
+Likelihood Ratio Test P-values:
+               P-value
+month          0.18480
+aged           0.31884
+sex            0.41802
+birthord       0.59542
+momage         0.80209
+momedu         0.04757
+momheight      0.94067
+Nlt18          0.73833
+Ncomp          0.76805
+hfiacat        0.09711
+elec           0.34206
+asset_wardrobe 0.77642
+asset_table    0.03990
+asset_chair    0.79141
+asset_khat     0.22581
+asset_chouki   0.48347
+asset_tv       0.12635
+asset_refrig   0.47652
+asset_bike     0.76125
+asset_moto     0.88002
+asset_sewmach  0.77220
+asset_mobile   0.88875
+tr             0.15566
+
+
+Covariates selected (P<0.2):
+               P-value
+month       0.18480355
+momedu      0.04757128
+hfiacat     0.09710988
+asset_table 0.03989863
+asset_tv    0.12634604
+tr          0.15566229
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+Loading required package: msm
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                    Coef.      2.5%    97.5% Std. Error  z value  Pr(>|z|)
+trImproved floor 1.616433 -1.113353 4.346218   1.392748 1.160607 0.2458019
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.068 (-0.047, 0.183)
+     SE(FECR) : 0.0588
+      p-value : 0.2456
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+            P-value
+month       0.22860
+momedu      0.06345
+hfiacat     0.08156
+asset_table 0.04450
+asset_tv    0.11861
+treatment   0.13260
+
+
+Covariates selected (P<0.2):
+               P-value
+momedu      0.06344662
+hfiacat     0.08155639
+asset_table 0.04450094
+asset_tv    0.11861296
+treatment   0.13259939
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                     Coef.     2.5%    97.5% Std. Error   z value  Pr(>|z|)
+trImproved floor 0.7060894 -2.37958 3.791758   1.574321 0.4485041 0.6537894
+
+ Coef of covariates
+                            Coef.       2.5%     97.5%
+momeduPrimary (1-5y)  -0.25640050 -1.2139183 0.7011173
+momeduSecondary (>5y)  0.55247999 -0.6289680 1.7339280
+hfiacatFood Secure     0.33989956 -0.4734403 1.1532395
+asset_table            0.66625764 -0.1975959 1.5301112
+asset_tv               0.15071682 -1.1580985 1.4595321
+treatmentSanitation   -0.58971281 -1.6850125 0.5055869
+treatmentWater         0.07201336 -1.0417094 1.1857361
+treatmentWSH          -0.95380301 -2.0266415 0.1190355
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.030 (-0.102, 0.161)
+     SE(FECR) : 0.0671
+      p-value : 0.6572
+-----------------------------------------
+[1] "CTmean.Ac"
+
+Likelihood Ratio Test P-values:
+               P-value
+month          0.02617
+aged           0.43223
+sex            0.94663
+birthord       0.99565
+momage         0.30505
+momedu         0.31545
+momheight      0.56700
+Nlt18          0.44063
+Ncomp          0.75821
+hfiacat        0.62615
+elec           0.43296
+asset_wardrobe 0.07420
+asset_table    0.28692
+asset_chair    0.06617
+asset_khat     0.36428
+asset_chouki   0.46601
+asset_tv       0.43043
+asset_refrig   0.11478
+asset_bike     0.86993
+asset_moto     0.01712
+asset_sewmach  0.06705
+asset_mobile   0.60046
+tr             0.86454
+
+
+Covariates selected (P<0.2):
+                  P-value
+month          0.02616613
+asset_wardrobe 0.07420383
+asset_chair    0.06616601
+asset_refrig   0.11478350
+asset_moto     0.01711591
+asset_sewmach  0.06705237
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                     Coef.      2.5%    97.5% Std. Error   z value  Pr(>|z|)
+trImproved floor 0.3669509 -3.906333 4.640235   2.180247 0.1683071 0.8663417
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.015 (-0.158, 0.188)
+     SE(FECR) : 0.0881
+      p-value : 0.8658
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+               P-value
+month          0.02846
+asset_wardrobe 0.04206
+asset_chair    0.05484
+asset_refrig   0.12265
+asset_moto     0.01921
+asset_sewmach  0.07325
+
+
+Covariates selected (P<0.2):
+                  P-value
+month          0.02846092
+asset_wardrobe 0.04205935
+asset_chair    0.05484170
+asset_refrig   0.12264785
+asset_moto     0.01920755
+asset_sewmach  0.07325241
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                    Coef.      2.5%    97.5% Std. Error  z value   Pr(>|z|)
+trImproved floor 5.731724 0.1287861 11.33466   2.858642 2.005051 0.04495754
+
+ Coef of covariates
+                    Coef.       2.5%      97.5%
+month          -0.3671051 -0.8214766 0.08726647
+asset_wardrobe -3.3959493 -6.9668619 0.17496325
+asset_chair    -1.6093248 -3.8454814 0.62683187
+asset_refrig   -2.1957770 -7.3832961 2.99174211
+asset_moto     -3.1533658 -6.4682730 0.16154144
+asset_sewmach  -2.5182572 -8.0610167 3.02450237
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.238 (-0.285, 0.761)
+     SE(FECR) : 0.2667
+      p-value : 0.3724
+-----------------------------------------
+[1] "CTmean.Na"
+
+Likelihood Ratio Test P-values:
+               P-value
+month          0.91640
+aged           0.04259
+sex            0.88436
+birthord       0.95487
+momage         0.60991
+momedu         0.76968
+momheight      0.87684
+Nlt18          0.52804
+Ncomp          0.06401
+hfiacat        0.46949
+elec           0.48745
+asset_wardrobe 0.65624
+asset_table    0.04330
+asset_chair    0.37752
+asset_khat     0.57727
+asset_chouki   0.67811
+asset_tv       0.86967
+asset_refrig   0.70544
+asset_bike     0.98493
+asset_moto     0.28044
+asset_sewmach  0.39656
+asset_mobile   0.62604
+tr             0.14533
+
+
+Covariates selected (P<0.2):
+               P-value
+aged        0.04258541
+Ncomp       0.06400927
+asset_table 0.04329510
+tr          0.14532702
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                      Coef.      2.5%    97.5% Std. Error    z value  Pr(>|z|)
+trImproved floor -0.8108093 -2.777103 1.155484   1.003211 -0.8082143 0.4189672
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : -0.037 (-0.127, 0.053)
+     SE(FECR) : 0.0460
+      p-value : 0.4181
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+            P-value
+aged        0.03857
+Ncomp       0.06389
+asset_table 0.04596
+treatment   0.13484
+
+
+Covariates selected (P<0.2):
+               P-value
+aged        0.03856805
+Ncomp       0.06388859
+asset_table 0.04595804
+treatment   0.13483611
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                     Coef.      2.5%     97.5% Std. Error   z value  Pr(>|z|)
+trImproved floor -1.051751 -2.892835 0.7893323  0.9393284 -1.119684 0.2628483
+
+ Coef of covariates
+                          Coef.        2.5%       97.5%
+aged                -0.00041421 -0.00078618 -0.00004223
+Ncomp               -0.05028475 -0.10284225  0.00227275
+asset_table          0.79398343 -0.04760667  1.63557354
+treatmentSanitation -0.86759999 -1.97650827  0.24130829
+treatmentWater      -0.20108041 -1.30518130  0.90302048
+treatmentWSH        -0.96954100 -2.12082740  0.18174540
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : -0.048 (-0.131, 0.035)
+     SE(FECR) : 0.0422
+      p-value : 0.2531
+-----------------------------------------
+[1] "CTmean.Tt"
+
+Likelihood Ratio Test P-values:
+               P-value
+month          0.57356
+aged           0.74124
+sex            0.11030
+birthord       0.57718
+momage         0.18833
+momedu         0.03149
+momheight      0.25269
+Nlt18          0.81543
+Ncomp          0.31270
+hfiacat        0.14681
+elec           0.07165
+asset_wardrobe 0.73026
+asset_table    0.01109
+asset_chair    0.03816
+asset_khat     0.14064
+asset_chouki   0.64956
+asset_tv       0.25910
+asset_refrig   0.57849
+asset_bike     0.06109
+asset_moto     0.00971
+asset_sewmach  0.89226
+asset_mobile   0.07781
+tr             0.12713
+
+
+Covariates selected (P<0.2):
+                 P-value
+sex          0.110302442
+momage       0.188329362
+momedu       0.031485666
+hfiacat      0.146814793
+elec         0.071645714
+asset_table  0.011090906
+asset_chair  0.038155075
+asset_khat   0.140640044
+asset_bike   0.061094653
+asset_moto   0.009712713
+asset_mobile 0.077814670
+tr           0.127125943
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                     Coef.     2.5%    97.5% Std. Error    z value  Pr(>|z|)
+trImproved floor -0.113451 -2.02813 1.801228  0.9768769 -0.1161364 0.9075444
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : -0.004 (-0.070, 0.062)
+     SE(FECR) : 0.0339
+      p-value : 0.9074
+-----------------------------------------
+
+-----------------------------------------
+Dropping 2 observations due to missing values in 1 or more variables
+ Final sample size: 341 
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+             P-value
+sex          0.11030
+momage       0.18833
+momedu       0.03149
+hfiacat      0.14681
+elec         0.07165
+asset_table  0.01109
+asset_chair  0.03816
+asset_khat   0.14064
+asset_bike   0.06109
+asset_moto   0.00971
+asset_mobile 0.07781
+treatment    0.12713
+
+
+Covariates selected (P<0.2):
+                 P-value
+sex          0.110302442
+momage       0.188329362
+momedu       0.031485666
+hfiacat      0.146814793
+elec         0.071645714
+asset_table  0.011090906
+asset_chair  0.038155075
+asset_khat   0.140640044
+asset_bike   0.061094653
+asset_moto   0.009712713
+asset_mobile 0.077814670
+treatment    0.127125943
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                      Coef.      2.5%    97.5% Std. Error    z value Pr(>|z|)
+trImproved floor -0.3941337 -2.853392 2.065125   1.254724 -0.3141199  0.75343
+
+ Coef of covariates
+                            Coef.        2.5%       97.5%
+sexmale               -0.55274431 -1.50351915  0.39803052
+momage                -0.03607642 -0.11070849  0.03855565
+momeduPrimary (1-5y)   0.54639149 -0.67988686  1.77266984
+momeduSecondary (>5y)  0.72465719 -0.48784485  1.93715923
+hfiacatFood Secure     0.40140978 -0.42279232  1.22561188
+elec                   0.16832139 -0.75760651  1.09424930
+asset_table            0.66266139 -0.43400827  1.75933105
+asset_chair            0.23957461 -0.87992297  1.35907219
+asset_khat            -0.03708518 -0.98005500  0.90588465
+asset_bike             0.53088437 -0.60897009  1.67073883
+asset_moto             2.35836153 -0.03796567  4.75468874
+asset_mobile           0.24091656 -0.96583340  1.44766652
+treatmentSanitation   -0.26252676 -1.56279454  1.03774102
+treatmentWater        -0.89652945 -2.19738697  0.40432806
+treatmentWSH          -1.71146349 -3.13160622 -0.29132076
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : -0.014 (-0.090, 0.063)
+     SE(FECR) : 0.0392
+      p-value : 0.7266
+-----------------------------------------
+[1] "hwepg"
+
+Likelihood Ratio Test P-values:
+               P-value
+month          0.63125
+aged           0.01804
+sex            0.09017
+birthord       0.16808
+momage         0.19663
+momedu         0.71108
+momheight      0.77132
+Nlt18          0.06370
+Ncomp          0.50574
+hfiacat        0.65784
+elec           0.28319
+asset_wardrobe 0.46377
+asset_table    0.61135
+asset_chair    0.44943
+asset_khat     0.23439
+asset_chouki   0.26946
+asset_tv       0.74545
+asset_refrig   0.99746
+asset_bike     0.33941
+asset_moto     0.44739
+asset_sewmach  0.39689
+asset_mobile   0.52254
+tr             0.49467
+
+
+Covariates selected (P<0.2):
+            P-value
+aged     0.01803727
+sex      0.09016965
+birthord 0.16808493
+momage   0.19662693
+Nlt18    0.06370326
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                    Coef.      2.5%    97.5% Std. Error   z value  Pr(>|z|)
+trImproved floor 105.0553 -173.4572 383.5678   142.0982 0.7393147 0.4597159
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.372 (-0.633, 1.378)
+     SE(FECR) : 0.5131
+      p-value : 0.4680
+-----------------------------------------
+
+-----------------------------------------
+Dropping 2 observations due to missing values in 1 or more variables
+ Final sample size: 552 
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+         P-value
+aged     0.01719
+sex      0.08717
+birthord 0.18105
+momage   0.22136
+Nlt18    0.06345
+
+
+Covariates selected (P<0.2):
+            P-value
+aged     0.01719210
+sex      0.08716847
+birthord 0.18104809
+Nlt18    0.06344953
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                    Coef.      2.5%    97.5% Std. Error  z value  Pr(>|z|)
+trImproved floor 138.2372 -126.0809 402.5554   134.8562 1.025072 0.3053294
+
+ Coef of covariates
+               Coef.         2.5%       97.5%
+aged      0.06893028   0.01285829   0.1250023
+sexmale  88.49107634  -9.61006725 186.5922199
+birthord 11.26827544 -11.52700161  34.0635525
+Nlt18    32.69816993 -35.71209698 101.1084368
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.493 (-2.398, 3.384)
+     SE(FECR) : 1.4752
+      p-value : 0.7382
+-----------------------------------------
+[1] "ttepg"
+
+Likelihood Ratio Test P-values:
+               P-value
+month          0.83581
+aged           0.08566
+sex            0.86529
+birthord       0.40947
+momage         0.49809
+momedu         0.75874
+momheight      0.15880
+Nlt18          0.81046
+Ncomp          0.28208
+hfiacat        0.09227
+elec           0.39312
+asset_wardrobe 0.36567
+asset_table    0.44155
+asset_chair    0.16132
+asset_khat     0.15377
+asset_chouki   0.39352
+asset_tv       0.29421
+asset_refrig   0.45157
+asset_bike     0.54179
+asset_moto     0.63605
+asset_sewmach  0.94092
+asset_mobile   0.00057
+tr             0.06409
+
+
+Covariates selected (P<0.2):
+                  P-value
+aged         0.0856567341
+momheight    0.1587968813
+hfiacat      0.0922691432
+asset_chair  0.1613179958
+asset_khat   0.1537657310
+asset_mobile 0.0005676345
+tr           0.0640923525
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                     Coef.      2.5%     97.5% Std. Error   z value    Pr(>|z|)
+trImproved floor -192.8796 -321.0966 -64.66266   65.41682 -2.948472 0.003193495
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : -0.603 (-0.930, -0.277)
+     SE(FECR) : 0.1667
+      p-value : 0.0003
+-----------------------------------------
+
+-----------------------------------------
+Dropping 1 observations due to missing values in 1 or more variables
+ Final sample size: 501 
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+             P-value
+aged         0.08858
+momheight    0.15312
+hfiacat      0.09565
+asset_chair  0.15787
+asset_khat   0.14994
+asset_mobile 0.00055
+treatment    0.06262
+
+
+Covariates selected (P<0.2):
+                  P-value
+aged         0.0885778592
+momheight    0.1531234757
+hfiacat      0.0956460512
+asset_chair  0.1578727567
+asset_khat   0.1499364130
+asset_mobile 0.0005474787
+treatment    0.0626244883
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                     Coef.      2.5%    97.5% Std. Error   z value  Pr(>|z|)
+trImproved floor -143.9856 -320.5605 32.58932   90.08923 -1.598255 0.1099862
+
+ Coef of covariates
+                                 Coef.         2.5%        97.5%
+aged                       -0.05451609   -0.1208063   0.01177414
+momheight                  -8.24142403  -21.3413135   4.85846540
+hfiacatFood Secure        -23.63773625 -133.3794239  86.10395143
+asset_chair               -38.34030244 -164.0231221  87.34251725
+asset_khat                -30.88351447 -134.0989594  72.33193044
+asset_mobile             -256.68542837 -499.3020727 -14.06878408
+treatmentHandwashing     -122.38108920 -244.1930265  -0.56915195
+treatmentNutrition         27.86996985 -104.1357641 159.87570379
+treatmentNutrition + WSH  264.44838657  -93.1812697 622.07804283
+treatmentSanitation        10.79231111 -228.4511204 250.03574268
+treatmentWater             68.78024042  -80.2410557 217.80153658
+treatmentWSH              237.69471686  -41.2770522 516.66648597
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : -0.453 (-0.585, -0.321)
+     SE(FECR) : 0.0674
+      p-value : 0.0000
+-----------------------------------------
+[1] "ctgi"
+
+Likelihood Ratio Test P-values:
+               P-value
+month          0.00010
+aged           0.79521
+sex            0.90651
+birthord       0.97354
+momage         0.48929
+momedu         0.51060
+momheight      0.77201
+Nlt18          0.99061
+Ncomp          0.31535
+hfiacat        0.84179
+elec           0.94288
+asset_wardrobe 0.39612
+asset_table    0.82309
+asset_chair    0.84603
+asset_khat     0.61984
+asset_chouki   0.22297
+asset_tv       0.07985
+asset_refrig   0.54592
+asset_bike     0.79999
+asset_moto     0.54743
+asset_sewmach  0.33585
+asset_mobile   0.32992
+tr             0.31152
+
+
+Covariates selected (P<0.2):
+             P-value
+month    0.000099168
+asset_tv 0.079853853
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                    Coef.       2.5%    97.5% Std. Error   z value  Pr(>|z|)
+trImproved floor 0.225272 -0.6424825 1.093027  0.4427319 0.5088226 0.6108765
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.007 (-0.021, 0.036)
+     SE(FECR) : 0.0144
+      p-value : 0.6110
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+         P-value
+month    0.00007
+asset_tv 0.05914
+
+
+Covariates selected (P<0.2):
+               P-value
+month    0.00007125867
+asset_tv 0.05913708356
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                       Coef.      2.5%     97.5% Std. Error    z value
+trImproved floor -0.08529387 -0.947886 0.7772982   0.440098 -0.1938065
+                  Pr(>|z|)
+trImproved floor 0.8463274
+
+ Coef of covariates
+             Coef.       2.5%     97.5%
+month    0.1571759  0.0815904 0.2327613
+asset_tv 0.3614900 -0.1840094 0.9069894
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : -0.003 (-0.031, 0.026)
+     SE(FECR) : 0.0145
+      p-value : 0.8476
+-----------------------------------------
+> 
+> b_glm_results = bind_rows(b_glm_results_list)
+> 
+> # Kenya
+> k_glm_results_list = lapply(k_ylist, function(x) 
++   fit_glm(yname = x, data = ke, country = "Kenya",  FECR = TRUE,
++           Ws = ke_Ws, label = "Main")
++ )
+[1] "asca_epg"
+
+Likelihood Ratio Test P-values:
+             P-value
+month        0.00003
+childage_sth 0.67417
+sex          0.58761
+momage       0.50793
+momedu       0.10220
+momheight    0.42475
+Nlt18        0.16291
+Ncomp        0.36623
+HHS          0.43758
+electricity  0.19584
+radio        0.90968
+television   0.12199
+mobile       0.05970
+clock        0.68762
+bicycle      0.28971
+motorcycle   0.71235
+stove        0.03755
+gascook      0.96396
+tr           0.94461
+
+
+Covariates selected (P<0.2):
+                  P-value
+month       0.00003377781
+momedu      0.10219878483
+Nlt18       0.16291126340
+electricity 0.19584110283
+television  0.12199401965
+mobile      0.05970288718
+stove       0.03754811109
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                     Coef.      2.5%    97.5% Std. Error    z value  Pr(>|z|)
+trImproved floor -830.9225 -6351.622 4689.776   2816.683 -0.2950004 0.7679936
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : -0.052 (-0.394, 0.291)
+     SE(FECR) : 0.1747
+      p-value : 0.7676
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+            P-value
+month       0.00013
+momedu      0.05121
+Nlt18       0.05153
+electricity 0.11792
+television  0.13309
+mobile      0.07756
+stove       0.00486
+
+
+Covariates selected (P<0.2):
+                 P-value
+month       0.0001343865
+momedu      0.0512144588
+Nlt18       0.0515289397
+electricity 0.1179153343
+television  0.1330885279
+mobile      0.0775561600
+stove       0.0048556155
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                    Coef.      2.5%    97.5% Std. Error   z value  Pr(>|z|)
+trImproved floor 909.8089 -4611.537 6431.155   2817.013 0.3229693 0.7467185
+
+ Coef of covariates
+                              Coef.         2.5%       97.5%
+monthApr                 5821.57333  -7186.24829 18829.39494
+monthAug                12451.15800  -2164.19475 27066.51075
+monthDec                 5762.44624  -7102.24882 18627.14129
+monthFeb                 1391.53258 -11332.08312 14115.14829
+monthJan                 1019.81313 -11716.38461 13756.01088
+monthJul                 3798.84970  -9652.65307 17250.35247
+monthJun                  309.62273 -12468.80304 13088.04850
+monthMar                 5486.65289  -7440.50066 18413.80645
+monthMay                 6607.50991  -6176.65503 19391.67485
+monthNov                  784.47498 -12036.08456 13605.03451
+monthOct                 1243.79620 -11475.77962 13963.37201
+monthSep                 3210.75833  -9510.05339 15931.57006
+momeduIncompletePrimary  1430.11102   -986.74051  3846.96254
+momeduPrimary              14.23774  -2723.42558  2751.90106
+Nlt18                     474.57863     12.24521   936.91205
+electricity             -2801.81949  -6820.10266  1216.46367
+television               -556.80060  -3371.83934  2258.23814
+mobile                  -1468.47010  -3732.08451   795.14431
+stove                   -1880.40798  -3723.87081   -36.94515
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.057 (-0.052, 0.166)
+     SE(FECR) : 0.0556
+      p-value : 0.3078
+-----------------------------------------
+[1] "al_qpcr"
+
+Likelihood Ratio Test P-values:
+             P-value
+month        0.03700
+childage_sth 0.47405
+sex          0.44045
+momage       0.26787
+momedu       0.35164
+momheight    0.33871
+Nlt18        0.43757
+Ncomp        0.11540
+HHS          0.28783
+electricity  0.43084
+radio        0.25517
+television   0.58046
+mobile       0.17734
+clock        0.42029
+bicycle      0.27214
+motorcycle   0.91819
+stove        0.07117
+gascook      0.92740
+tr           0.77508
+
+
+Covariates selected (P<0.2):
+          P-value
+month  0.03700496
+Ncomp  0.11540193
+mobile 0.17734022
+stove  0.07116694
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                      Coef.      2.5%    97.5% Std. Error    z value  Pr(>|z|)
+trImproved floor -0.2415106 -2.363945 1.880923   1.082874 -0.2230273 0.8235143
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : -0.010 (-0.093, 0.074)
+     SE(FECR) : 0.0428
+      p-value : 0.8234
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+       P-value
+month  0.00465
+Ncomp  0.05838
+mobile 0.23441
+stove  0.03984
+
+
+Covariates selected (P<0.2):
+          P-value
+month 0.004649004
+Ncomp 0.058384441
+stove 0.039835808
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                      Coef.      2.5%   97.5% Std. Error    z value  Pr(>|z|)
+trImproved floor -0.4119734 -2.278276 1.45433  0.9521954 -0.4326563 0.6652645
+
+ Coef of covariates
+               Coef.        2.5%       97.5%
+monthApr -1.80250289 -2.98526976 -0.61973602
+monthAug -2.58987299 -5.26634902  0.08660305
+monthDec -1.80240706 -2.94185842 -0.66295571
+monthFeb -0.78017681 -2.08270192  0.52234831
+monthJan -1.70580272 -2.52167525 -0.88993019
+monthJul -1.78028973 -3.91685143  0.35627196
+monthJun -2.11178415 -2.88369613 -1.33987216
+monthMar -3.67976744 -4.84031474 -2.51922014
+monthMay -2.26789420 -3.65190381 -0.88388460
+monthNov -1.39951106 -2.28972185 -0.50930028
+monthOct -2.35146965 -3.36744958 -1.33548972
+monthSep -0.93604365 -2.28023129  0.40814399
+Ncomp    -0.04502881 -0.09605454  0.00599692
+stove     0.66737536  0.04438985  1.29036087
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : -0.016 (-0.396, 0.363)
+     SE(FECR) : 0.1937
+      p-value : 0.9330
+-----------------------------------------
+[1] "na_qpcr"
+
+Likelihood Ratio Test P-values:
+             P-value
+month        0.42197
+childage_sth 0.86455
+sex          0.34183
+momage       0.17945
+momedu       0.24895
+momheight    0.09978
+Nlt18        0.99992
+Ncomp        0.64041
+HHS          0.85729
+electricity  0.88919
+radio        0.95210
+television   0.29352
+mobile       0.19357
+clock        0.53864
+bicycle      0.33216
+motorcycle   0.85002
+stove        0.93893
+gascook      0.86299
+tr           0.92032
+
+
+Covariates selected (P<0.2):
+             P-value
+momage    0.17944880
+momheight 0.09978467
+mobile    0.19356615
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                     Coef.      2.5%    97.5% Std. Error z value  Pr(>|z|)
+trImproved floor 0.9674219 -3.764782 5.699626    2.41439 0.40069 0.6886484
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.038 (-0.147, 0.222)
+     SE(FECR) : 0.0940
+      p-value : 0.6883
+-----------------------------------------
+
+-----------------------------------------
+Dropping 9 observations due to missing values in 1 or more variables
+ Final sample size: 206 
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+          P-value
+momage    0.25696
+momheight 0.12535
+mobile    0.17208
+
+
+Covariates selected (P<0.2):
+            P-value
+momheight 0.1253539
+mobile    0.1720795
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                    Coef.      2.5%    97.5% Std. Error  z value  Pr(>|z|)
+trImproved floor 2.750551 -1.520475 7.021578   2.179095 1.262245 0.2068607
+
+ Coef of covariates
+                Coef.       2.5%       97.5%
+momheight -0.08287998 -0.1350245 -0.03073542
+mobile     1.64195013 -0.6471613  3.93106158
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.107 (-0.002, 0.215)
+     SE(FECR) : 0.0554
+      p-value : 0.0543
+-----------------------------------------
+[1] "tt_qpcr"
+
+Likelihood Ratio Test P-values:
+             P-value
+month        0.47936
+childage_sth 0.78621
+sex          0.74559
+momage       0.90242
+momedu       0.02296
+momheight    0.14152
+Nlt18        0.28942
+Ncomp        0.48346
+HHS          0.04880
+electricity  0.81534
+radio        0.41236
+television   0.79245
+mobile       0.49842
+clock        0.79245
+bicycle      0.65891
+motorcycle   0.09999
+stove        0.14998
+gascook      0.40514
+tr           0.26412
+
+
+Covariates selected (P<0.2):
+              P-value
+momedu     0.02295573
+momheight  0.14152020
+HHS        0.04879502
+motorcycle 0.09998778
+stove      0.14998481
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                     Coef.     2.5%    97.5% Std. Error  z value  Pr(>|z|)
+trImproved floor 0.8727864 -3.15611 4.901682   2.055559 0.424598 0.6711297
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.030 (-0.107, 0.167)
+     SE(FECR) : 0.0698
+      p-value : 0.6676
+-----------------------------------------
+
+-----------------------------------------
+Dropping 3 observations due to missing values in 1 or more variables
+ Final sample size: 34 
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+           P-value
+momedu     0.01713
+momheight  0.10980
+HHS        0.04632
+motorcycle 0.15622
+stove      0.35684
+
+
+Covariates selected (P<0.2):
+              P-value
+momedu     0.01712934
+momheight  0.10979535
+HHS        0.04631596
+motorcycle 0.15621753
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from GLM results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+
+-----------------------------------------
+ GLM Fit: Improved floor vs. Unimproved floor 
+-----------------------------------------
+                     Coef.      2.5%    97.5% Std. Error   z value  Pr(>|z|)
+trImproved floor 0.6542362 -2.468102 3.776575    1.59303 0.4106867 0.6813023
+
+ Coef of covariates
+                             Coef.        2.5%       97.5%
+momeduIncompletePrimary -2.9739516 -5.94698073 -0.00092252
+momeduPrimary           -1.0375120 -4.43197028  2.35694628
+momheight                0.1182785 -0.02453896  0.26109605
+HHS1                    -2.8657120 -5.94766828  0.21624437
+motorcycle              -1.9205845 -3.36703697 -0.47413212
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.023 (-0.514, 0.559)
+     SE(FECR) : 0.2738
+      p-value : 0.9344
+-----------------------------------------
+> 
+> k_glm_results = bind_rows(k_glm_results_list)
+> 
+> 
+> #-------------------------------------------------------------------------------
+> # Fit TMLE
+> #-------------------------------------------------------------------------------
+> # Bangladesh
+> b_tmle_results_list = lapply(b_ylist, function(x) 
++     fit_tmle(yname = x, data = bd, country = "Bangladesh", FECR = TRUE,
++             Ws = bd_Ws, label = "Main")
++   )
+[1] "Variables that have <30observations when stratified by floor were removed from covariates list:"
+ [1] "month"          "sex"            "elec"           "asset_wardrobe"
+ [5] "asset_table"    "asset_chair"    "asset_khat"     "asset_chouki"  
+ [9] "asset_tv"       "asset_refrig"   "asset_bike"     "asset_moto"    
+[13] "asset_sewmach"  "asset_mobile"  
+
+Likelihood Ratio Test P-values:
+          P-value
+tr        0.15566
+quarter   0.34781
+aged      0.31884
+birthord  0.59542
+momage    0.80209
+momedu    0.04757
+momheight 0.94067
+Nlt18     0.73833
+Ncomp     0.76805
+hfiacat   0.09711
+
+
+Covariates selected (P<0.2):
+           P-value
+tr      0.15566229
+momedu  0.04757128
+hfiacat 0.09710988
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~ 1
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~ 1 
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  1.5017
+   Estimated Variance:  0.74764
+              p-value:  0.082422
+    95% Conf Interval: (-0.19299, 3.1965) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  2.6656
+   Estimated Variance:  4.2875
+              p-value:  0.19798
+    95% Conf Interval: (-1.3928, 6.724) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  1.4851
+   Estimated Variance:  0.73134
+              p-value:  0.082457
+    95% Conf Interval: (-0.19104, 3.1613) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.063 (-0.032, 0.159)
+     SE(FECR) : 0.0487
+      p-value : 0.1929
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates
+using a univariate liklihood ratio test:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+                     P-value
+trSanitation         0.33860
+trWater              0.11690
+trWSH                0.08267
+momeduPrimary.1.5y.  0.08022
+momeduSecondary..5y. 0.02278
+hfiacatFoodSecure    0.08156
+
+
+Covariates selected (P<0.2):
+                        P-value
+trWater              0.11690198
+trWSH                0.08267044
+momeduPrimary.1.5y.  0.08021733
+momeduSecondary..5y. 0.02277957
+hfiacatFoodSecure    0.08155639
+
+-----------------------------------------
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All + SL.glmnet_All
+
+	 Coefficients: 
+	     SL.mean_All    0.5698533 
+	      SL.glm_All    0 
+	 SL.bayesglm_All    0.4301467 
+	      SL.gam_All    0 
+	   SL.glmnet_All    0 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All + SL.glmnet_All 
+
+	 Coefficients: 
+	     SL.mean_All    0 
+	      SL.glm_All    0 
+	 SL.bayesglm_All    1 
+	      SL.gam_All    0 
+	   SL.glmnet_All    0 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  2.4062
+   Estimated Variance:  0.14073
+              p-value:  0.00000000014165
+    95% Conf Interval: (1.6709, 3.1415) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  4.8401
+   Estimated Variance:  10.239
+              p-value:  0.13038
+    95% Conf Interval: (-1.4316, 11.112) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  2.3714
+   Estimated Variance:  0.12748
+              p-value:  0.00000000003096
+    95% Conf Interval: (1.6716, 3.0712) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.102 (0.069, 0.134)
+     SE(FECR) : 0.0164
+      p-value : 0.0000
+-----------------------------------------
+[1] "Variables that have <30observations when stratified by floor were removed from covariates list:"
+ [1] "month"          "sex"            "elec"           "asset_wardrobe"
+ [5] "asset_table"    "asset_chair"    "asset_khat"     "asset_chouki"  
+ [9] "asset_tv"       "asset_refrig"   "asset_bike"     "asset_moto"    
+[13] "asset_sewmach"  "asset_mobile"  
+
+Likelihood Ratio Test P-values:
+          P-value
+tr        0.86454
+quarter   0.02036
+aged      0.43223
+birthord  0.99565
+momage    0.30505
+momedu    0.31545
+momheight 0.56700
+Nlt18     0.44063
+Ncomp     0.75821
+hfiacat   0.62615
+
+
+Covariates selected (P<0.2):
+          P-value
+quarter 0.0203624
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~ 1
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~ 1 
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  -0.061408
+   Estimated Variance:  6.1606
+              p-value:  0.98026
+    95% Conf Interval: (-4.9262, 4.8034) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  0.35773
+   Estimated Variance:  6.676
+              p-value:  0.88988
+    95% Conf Interval: (-4.7065, 5.422) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  -0.12345
+   Estimated Variance:  6.1335
+              p-value:  0.96024
+    95% Conf Interval: (-4.9776, 4.7307) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : -0.002 (-0.200, 0.195)
+     SE(FECR) : 0.1007
+      p-value : 0.9803
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates
+using a univariate liklihood ratio test:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+    P-value
+WQ2 0.97753
+WQ4 0.00938
+
+
+Covariates selected (P<0.2):
+        P-value
+WQ4 0.009377146
+
+-----------------------------------------
+
+NOTE: Dropping SL.glmnet from the library
+because there is only 1 covariate selected and glmnet
+requires 2+ covariates to run
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All
+
+	 Coefficients: 
+	     SL.mean_All    0.4068392 
+	      SL.glm_All    0.5931608 
+	 SL.bayesglm_All    0 
+	      SL.gam_All    0 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All 
+
+	 Coefficients: 
+	     SL.mean_All    0 
+	      SL.glm_All    1 
+	 SL.bayesglm_All    0 
+	      SL.gam_All    0 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  1.4674
+   Estimated Variance:  5.4379
+              p-value:  0.52917
+    95% Conf Interval: (-3.1032, 6.038) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  1.6615
+   Estimated Variance:  6.1098
+              p-value:  0.50146
+    95% Conf Interval: (-3.1832, 6.5063) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  1.4775
+   Estimated Variance:  5.6055
+              p-value:  0.5326
+    95% Conf Interval: (-3.163, 6.1179) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.060 (-0.127, 0.247)
+     SE(FECR) : 0.0955
+      p-value : 0.5307
+-----------------------------------------
+[1] "Variables that have <30observations when stratified by floor were removed from covariates list:"
+ [1] "month"          "sex"            "elec"           "asset_wardrobe"
+ [5] "asset_table"    "asset_chair"    "asset_khat"     "asset_chouki"  
+ [9] "asset_tv"       "asset_refrig"   "asset_bike"     "asset_moto"    
+[13] "asset_sewmach"  "asset_mobile"  
+
+Likelihood Ratio Test P-values:
+          P-value
+tr        0.14533
+quarter   0.87461
+aged      0.04259
+birthord  0.95487
+momage    0.60991
+momedu    0.76968
+momheight 0.87684
+Nlt18     0.52804
+Ncomp     0.06401
+hfiacat   0.46949
+
+
+Covariates selected (P<0.2):
+         P-value
+tr    0.14532702
+aged  0.04258541
+Ncomp 0.06400927
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~ 1
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~ 1 
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  -0.77777
+   Estimated Variance:  0.61273
+              p-value:  0.32041
+    95% Conf Interval: (-2.312, 0.75647) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  -0.86507
+   Estimated Variance:  0.74065
+              p-value:  0.31481
+    95% Conf Interval: (-2.5519, 0.82172) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  -0.77671
+   Estimated Variance:  0.61003
+              p-value:  0.32001
+    95% Conf Interval: (-2.3076, 0.75414) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : -0.036 (-0.108, 0.036)
+     SE(FECR) : 0.0368
+      p-value : 0.3321
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates
+using a univariate liklihood ratio test:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+             P-value
+aged         0.03857
+Ncomp        0.06389
+trSanitation 0.27673
+trWater      0.27853
+trWSH        0.10939
+
+
+Covariates selected (P<0.2):
+         P-value
+aged  0.03856805
+Ncomp 0.06388859
+trWSH 0.10939063
+
+-----------------------------------------
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All + SL.glmnet_All
+
+	 Coefficients: 
+	     SL.mean_All    0.4032086 
+	      SL.glm_All    0 
+	 SL.bayesglm_All    0.5967914 
+	      SL.gam_All    0 
+	   SL.glmnet_All    0 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All + SL.glmnet_All 
+
+	 Coefficients: 
+	     SL.mean_All    0.6255672 
+	      SL.glm_All    0 
+	 SL.bayesglm_All    0 
+	      SL.gam_All    0.3744328 
+	   SL.glmnet_All    0 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  -0.69824
+   Estimated Variance:  0.61935
+              p-value:  0.37496
+    95% Conf Interval: (-2.2407, 0.84426) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  -0.85443
+   Estimated Variance:  0.69614
+              p-value:  0.30581
+    95% Conf Interval: (-2.4898, 0.7809) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  -0.69716
+   Estimated Variance:  0.61826
+              p-value:  0.37527
+    95% Conf Interval: (-2.2383, 0.84398) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : -0.032 (-0.106, 0.042)
+     SE(FECR) : 0.0379
+      p-value : 0.3975
+-----------------------------------------
+[1] "Variables that have <30observations when stratified by floor were removed from covariates list:"
+ [1] "month"          "sex"            "elec"           "asset_wardrobe"
+ [5] "asset_table"    "asset_chair"    "asset_khat"     "asset_chouki"  
+ [9] "asset_tv"       "asset_refrig"   "asset_bike"     "asset_moto"    
+[13] "asset_sewmach"  "asset_mobile"  
+
+Likelihood Ratio Test P-values:
+          P-value
+tr        0.12713
+quarter   0.47801
+aged      0.74124
+birthord  0.57718
+momage    0.18833
+momedu    0.03149
+momheight 0.25269
+Nlt18     0.81543
+Ncomp     0.31270
+hfiacat   0.14681
+
+
+Covariates selected (P<0.2):
+           P-value
+tr      0.12712594
+momage  0.18832936
+momedu  0.03148567
+hfiacat 0.14681479
+[1] "2 rows dropped due to missing data"
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~ 1
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~ 1 
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  0.046939
+   Estimated Variance:  3.0623
+              p-value:  0.9786
+    95% Conf Interval: (-3.3829, 3.4768) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  -0.15304
+   Estimated Variance:  2.7635
+              p-value:  0.92665
+    95% Conf Interval: (-3.4113, 3.1052) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  0.047147
+   Estimated Variance:  3.0806
+              p-value:  0.97857
+    95% Conf Interval: (-3.3929, 3.4872) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.002 (-0.118, 0.121)
+     SE(FECR) : 0.0608
+      p-value : 0.9786
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates
+using a univariate liklihood ratio test:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+                     P-value
+momage               0.18833
+trSanitation         0.60803
+trWater              0.86326
+trWSH                0.03356
+momeduPrimary.1.5y.  0.46125
+momeduSecondary..5y. 0.01419
+hfiacatFoodSecure    0.14681
+
+
+Covariates selected (P<0.2):
+                        P-value
+momage               0.18832936
+trWSH                0.03355660
+momeduSecondary..5y. 0.01419429
+hfiacatFoodSecure    0.14681479
+
+-----------------------------------------
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All + SL.glmnet_All
+
+	 Coefficients: 
+	     SL.mean_All    0.033906 
+	      SL.glm_All    0 
+	 SL.bayesglm_All    0 
+	      SL.gam_All    0.2698394 
+	   SL.glmnet_All    0.6962546 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All + SL.glmnet_All 
+
+	 Coefficients: 
+	     SL.mean_All    0.4830877 
+	      SL.glm_All    0 
+	 SL.bayesglm_All    0.2930536 
+	      SL.gam_All    0 
+	   SL.glmnet_All    0.2238586 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  0.44878
+   Estimated Variance:  1.862
+              p-value:  0.74224
+    95% Conf Interval: (-2.2258, 3.1233) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  -0.4037
+   Estimated Variance:  2.8603
+              p-value:  0.81133
+    95% Conf Interval: (-3.7185, 2.9111) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  0.5855
+   Estimated Variance:  1.7885
+              p-value:  0.66153
+    95% Conf Interval: (-2.0357, 3.2067) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.016 (-0.077, 0.109)
+     SE(FECR) : 0.0474
+      p-value : 0.7424
+-----------------------------------------
+[1] "Variables that have <30observations when stratified by floor were removed from covariates list:"
+ [1] "month"          "sex"            "elec"           "asset_wardrobe"
+ [5] "asset_table"    "asset_chair"    "asset_khat"     "asset_chouki"  
+ [9] "asset_tv"       "asset_refrig"   "asset_bike"     "asset_moto"    
+[13] "asset_sewmach"  "asset_mobile"  
+
+Likelihood Ratio Test P-values:
+          P-value
+tr        0.49467
+quarter   0.72316
+aged      0.01804
+birthord  0.16808
+momage    0.19663
+momedu    0.71108
+momheight 0.77132
+Nlt18     0.06370
+Ncomp     0.50574
+hfiacat   0.65784
+
+
+Covariates selected (P<0.2):
+            P-value
+aged     0.01803727
+birthord 0.16808493
+momage   0.19662693
+Nlt18    0.06370326
+[1] "2 rows dropped due to missing data"
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~ 1
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~ 1 
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  112.98
+   Estimated Variance:  60324
+              p-value:  0.64551
+    95% Conf Interval: (-368.41, 594.37) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  108.81
+   Estimated Variance:  58186
+              p-value:  0.65192
+    95% Conf Interval: (-363.97, 581.6) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  112.84
+   Estimated Variance:  60411
+              p-value:  0.64618
+    95% Conf Interval: (-368.91, 594.58) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.402 (-1.554, 2.357)
+     SE(FECR) : 0.9978
+      p-value : 0.6873
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates
+using a univariate liklihood ratio test:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+         P-value
+aged     0.01719
+birthord 0.18105
+momage   0.22136
+Nlt18    0.06345
+
+
+Covariates selected (P<0.2):
+            P-value
+aged     0.01719210
+birthord 0.18104809
+Nlt18    0.06344953
+
+-----------------------------------------
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All + SL.glmnet_All
+
+	 Coefficients: 
+	     SL.mean_All    0.6705148 
+	      SL.glm_All    0 
+	 SL.bayesglm_All    0.3294852 
+	      SL.gam_All    0 
+	   SL.glmnet_All    0 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All + SL.glmnet_All 
+
+	 Coefficients: 
+	     SL.mean_All    1 
+	      SL.glm_All    0 
+	 SL.bayesglm_All    0 
+	      SL.gam_All    0 
+	   SL.glmnet_All    0 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  122.66
+   Estimated Variance:  56071
+              p-value:  0.60445
+    95% Conf Interval: (-341.45, 586.78) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  119.6
+   Estimated Variance:  56404
+              p-value:  0.61456
+    95% Conf Interval: (-345.9, 585.09) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  122.66
+   Estimated Variance:  56063
+              p-value:  0.60442
+    95% Conf Interval: (-341.42, 586.75) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.437 (-1.233, 2.106)
+     SE(FECR) : 0.8517
+      p-value : 0.6082
+-----------------------------------------
+[1] "Variables that have <30observations when stratified by floor were removed from covariates list:"
+ [1] "month"          "sex"            "elec"           "asset_wardrobe"
+ [5] "asset_table"    "asset_chair"    "asset_khat"     "asset_chouki"  
+ [9] "asset_tv"       "asset_refrig"   "asset_bike"     "asset_moto"    
+[13] "asset_sewmach"  "asset_mobile"  
+
+Likelihood Ratio Test P-values:
+          P-value
+tr        0.06409
+quarter   0.25923
+aged      0.08566
+birthord  0.40947
+momage    0.49809
+momedu    0.75874
+momheight 0.15880
+Nlt18     0.81046
+Ncomp     0.28208
+hfiacat   0.09227
+
+
+Covariates selected (P<0.2):
+             P-value
+tr        0.06409235
+aged      0.08565673
+momheight 0.15879688
+hfiacat   0.09226914
+[1] "1 rows dropped due to missing data"
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~ 1
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~ 1 
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  -201.63
+   Estimated Variance:  1762.4
+              p-value:  0.0000015639
+    95% Conf Interval: (-283.91, -119.35) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  -226.06
+   Estimated Variance:  2066.8
+              p-value:  0.00000066128
+    95% Conf Interval: (-315.16, -136.95) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  -200.6
+   Estimated Variance:  1755.4
+              p-value:  0.0000016869
+    95% Conf Interval: (-282.72, -118.48) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : -0.632 (-0.791, -0.473)
+     SE(FECR) : 0.0811
+      p-value : 0.0000
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates
+using a univariate liklihood ratio test:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+                  P-value
+aged              0.08858
+momheight         0.15312
+trHandwashing     0.07498
+trNutrition       0.49678
+trNutrition.WSH   0.01705
+trSanitation      0.48317
+trWater           0.88117
+trWSH             0.07694
+hfiacatFoodSecure 0.09565
+
+
+Covariates selected (P<0.2):
+                     P-value
+aged              0.08857786
+momheight         0.15312348
+trHandwashing     0.07497670
+trNutrition.WSH   0.01705457
+trWSH             0.07694470
+hfiacatFoodSecure 0.09564605
+
+-----------------------------------------
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All + SL.glmnet_All
+
+	 Coefficients: 
+	     SL.mean_All    0.5388062 
+	      SL.glm_All    0 
+	 SL.bayesglm_All    0 
+	      SL.gam_All    0.4611938 
+	   SL.glmnet_All    0 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All + SL.glmnet_All 
+
+	 Coefficients: 
+	     SL.mean_All    0 
+	      SL.glm_All    0 
+	 SL.bayesglm_All    0 
+	      SL.gam_All    0.02974802 
+	   SL.glmnet_All    0.970252 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  -205.78
+   Estimated Variance:  2278.4
+              p-value:  0.00001625
+    95% Conf Interval: (-299.33, -112.22) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  -199.17
+   Estimated Variance:  3272.1
+              p-value:  0.00049793
+    95% Conf Interval: (-311.29, -87.055) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  -205.41
+   Estimated Variance:  2260.6
+              p-value:  0.000015585
+    95% Conf Interval: (-298.6, -112.22) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : -0.646 (-0.881, -0.411)
+     SE(FECR) : 0.1200
+      p-value : 0.0000
+-----------------------------------------
+[1] "Variables that have <30observations when stratified by floor were removed from covariates list:"
+[1] "month"         "elec"          "asset_table"   "asset_chair"  
+[5] "asset_khat"    "asset_moto"    "asset_sewmach" "asset_mobile" 
+
+Likelihood Ratio Test P-values:
+               P-value
+sex            0.90651
+asset_wardrobe 0.39612
+asset_chouki   0.22297
+asset_tv       0.07985
+asset_refrig   0.54592
+asset_bike     0.79999
+tr             0.31152
+quarter        0.00000
+aged           0.79521
+birthord       0.97354
+momage         0.48929
+momedu         0.51060
+momheight      0.77201
+Nlt18          0.99061
+Ncomp          0.31535
+hfiacat        0.84179
+
+
+Covariates selected (P<0.2):
+                P-value
+asset_tv 0.079853853305
+quarter  0.000003332945
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~ 1
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~ 1 
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  0.2109
+   Estimated Variance:  0.24248
+              p-value:  0.66844
+    95% Conf Interval: (-0.75425, 1.1761) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  0.2397
+   Estimated Variance:  0.23494
+              p-value:  0.62094
+    95% Conf Interval: (-0.71033, 1.1897) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  0.21089
+   Estimated Variance:  0.24309
+              p-value:  0.66885
+    95% Conf Interval: (-0.75548, 1.1773) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.007 (-0.025, 0.038)
+     SE(FECR) : 0.0161
+      p-value : 0.6686
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates
+using a univariate liklihood ratio test:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+          P-value
+asset_tv  0.05914
+quarterQ2 0.00009
+quarterQ3 0.65931
+quarterQ4 0.05953
+
+
+Covariates selected (P<0.2):
+                P-value
+asset_tv  0.05913708356
+quarterQ2 0.00009197055
+quarterQ4 0.05953009391
+
+-----------------------------------------
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All + SL.glmnet_All
+
+	 Coefficients: 
+	     SL.mean_All    0.2281485 
+	      SL.glm_All    0 
+	 SL.bayesglm_All    0.7718515 
+	      SL.gam_All    0 
+	   SL.glmnet_All    0 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All + SL.glmnet_All 
+
+	 Coefficients: 
+	     SL.mean_All    0 
+	      SL.glm_All    0 
+	 SL.bayesglm_All    0.3423458 
+	      SL.gam_All    0 
+	   SL.glmnet_All    0.6576542 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  -0.057703
+   Estimated Variance:  0.16231
+              p-value:  0.88611
+    95% Conf Interval: (-0.84734, 0.73193) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  0.057829
+   Estimated Variance:  0.26437
+              p-value:  0.91045
+    95% Conf Interval: (-0.94995, 1.0656) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  -0.059999
+   Estimated Variance:  0.16404
+              p-value:  0.88223
+    95% Conf Interval: (-0.85384, 0.73384) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : -0.002 (-0.028, 0.024)
+     SE(FECR) : 0.0131
+      p-value : 0.8861
+-----------------------------------------
+> 
+> b_tmle_results = bind_rows(b_tmle_results_list)
+> 
+> # Kenya
+> k_tmle_results_list = lapply(k_ylist, function(x) 
++   fit_tmle(yname = x, data = ke, country = "Kenya",  FECR = TRUE,
++              Ws = ke_Ws, label = "Main")
++   )
+[1] "Variables that have <30observations when stratified by floor were removed from covariates list:"
+ [1] "month"       "sex"         "electricity" "radio"       "television" 
+ [6] "mobile"      "clock"       "bicycle"     "motorcycle"  "stove"      
+[11] "gascook"    
+
+Likelihood Ratio Test P-values:
+             P-value
+tr           0.94461
+quarter      0.19695
+childage_sth 0.67417
+momage       0.50793
+momedu       0.10220
+momheight    0.42475
+Ncomp        0.36623
+HHS          0.43758
+Nlt18        0.16291
+
+
+Covariates selected (P<0.2):
+          P-value
+quarter 0.1969493
+momedu  0.1021988
+Nlt18   0.1629113
+[1] "9 rows dropped due to missing data"
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~ 1
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~ 1 
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  -1139.4
+   Estimated Variance:  15262000
+              p-value:  0.77054
+    95% Conf Interval: (-8796.4, 6517.5) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  -839.05
+   Estimated Variance:  15859000
+              p-value:  0.83313
+    95% Conf Interval: (-8644.3, 6966.2) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  -1139.4
+   Estimated Variance:  15245000
+              p-value:  0.77042
+    95% Conf Interval: (-8792.3, 6513.4) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : -0.071 (-0.546, 0.404)
+     SE(FECR) : 0.2422
+      p-value : 0.7702
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates
+using a univariate liklihood ratio test:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+                        P-value
+Nlt18                   0.04204
+quarterQ2               0.41290
+quarterQ3               0.09367
+quarterQ4               0.26513
+momeduIncompletePrimary 0.02245
+momeduPrimary           0.31564
+
+
+Covariates selected (P<0.2):
+                           P-value
+Nlt18                   0.04204424
+quarterQ3               0.09366550
+momeduIncompletePrimary 0.02245452
+
+-----------------------------------------
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All + SL.glmnet_All
+
+	 Coefficients: 
+	     SL.mean_All    0.3331798 
+	      SL.glm_All    0 
+	 SL.bayesglm_All    0 
+	      SL.gam_All    0.6668202 
+	   SL.glmnet_All    0 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All + SL.glmnet_All 
+
+	 Coefficients: 
+	     SL.mean_All    0.3870217 
+	      SL.glm_All    0 
+	 SL.bayesglm_All    0.6129783 
+	      SL.gam_All    0 
+	   SL.glmnet_All    0 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  -1777.2
+   Estimated Variance:  15183000
+              p-value:  0.64832
+    95% Conf Interval: (-9414.5, 5860) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  -687.39
+   Estimated Variance:  15859000
+              p-value:  0.86296
+    95% Conf Interval: (-8492.8, 7118) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  -1777.7
+   Estimated Variance:  15218000
+              p-value:  0.64861
+    95% Conf Interval: (-9423.7, 5868.3) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : -0.110 (-0.596, 0.375)
+     SE(FECR) : 0.2477
+      p-value : 0.6558
+-----------------------------------------
+[1] "Variables that have <30observations when stratified by floor were removed from covariates list:"
+ [1] "month"       "sex"         "electricity" "radio"       "television" 
+ [6] "mobile"      "clock"       "bicycle"     "motorcycle"  "stove"      
+[11] "gascook"    
+
+Likelihood Ratio Test P-values:
+             P-value
+tr           0.77508
+quarter      0.77402
+childage_sth 0.47405
+momage       0.26787
+momedu       0.35164
+momheight    0.33871
+Ncomp        0.11540
+HHS          0.28783
+Nlt18        0.43757
+
+
+Covariates selected (P<0.2):
+        P-value
+Ncomp 0.1154019
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~ 1
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~ 1 
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  -0.1048
+   Estimated Variance:  2.1831
+              p-value:  0.94345
+    95% Conf Interval: (-3.0008, 2.7912) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  -0.24662
+   Estimated Variance:  2.097
+              p-value:  0.86477
+    95% Conf Interval: (-3.0849, 2.5917) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  -0.10465
+   Estimated Variance:  2.1873
+              p-value:  0.94359
+    95% Conf Interval: (-3.0034, 2.7941) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : -0.004 (-0.121, 0.113)
+     SE(FECR) : 0.0597
+      p-value : 0.9446
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates
+using a univariate liklihood ratio test:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+  P-value
+W 0.05838
+
+
+Covariates selected (P<0.2):
+     P-value
+W 0.05838444
+
+-----------------------------------------
+
+NOTE: Dropping SL.glmnet from the library
+because there is only 1 covariate selected and glmnet
+requires 2+ covariates to run
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All
+
+	 Coefficients: 
+	     SL.mean_All    1 
+	      SL.glm_All    0 
+	 SL.bayesglm_All    0 
+	      SL.gam_All    0 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All 
+
+	 Coefficients: 
+	     SL.mean_All    1 
+	      SL.glm_All    0 
+	 SL.bayesglm_All    0 
+	      SL.gam_All    0 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  -0.24151
+   Estimated Variance:  2.0969
+              p-value:  0.86754
+    95% Conf Interval: (-3.0797, 2.5967) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  -0.24151
+   Estimated Variance:  2.0969
+              p-value:  0.86754
+    95% Conf Interval: (-3.0797, 2.5967) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  -0.24151
+   Estimated Variance:  2.0969
+              p-value:  0.86754
+    95% Conf Interval: (-3.0797, 2.5967) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : -0.010 (-0.122, 0.103)
+     SE(FECR) : 0.0572
+      p-value : 0.8675
+-----------------------------------------
+[1] "Variables that have <30observations when stratified by floor were removed from covariates list:"
+ [1] "month"       "sex"         "electricity" "radio"       "television" 
+ [6] "mobile"      "clock"       "bicycle"     "motorcycle"  "stove"      
+[11] "gascook"    
+
+Likelihood Ratio Test P-values:
+             P-value
+tr           0.92032
+quarter      0.93366
+childage_sth 0.86455
+momage       0.17945
+momedu       0.24895
+momheight    0.09978
+Ncomp        0.64041
+HHS          0.85729
+Nlt18        0.99992
+
+
+Covariates selected (P<0.2):
+             P-value
+momage    0.17944880
+momheight 0.09978467
+[1] "9 rows dropped due to missing data"
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~ 1
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~ 1 
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  1.881
+   Estimated Variance:  5.8488
+              p-value:  0.43671
+    95% Conf Interval: (-2.8591, 6.6211) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  3.0474
+   Estimated Variance:  10.643
+              p-value:  0.35025
+    95% Conf Interval: (-3.3468, 9.4415) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  1.8706
+   Estimated Variance:  5.7209
+              p-value:  0.43418
+    95% Conf Interval: (-2.8174, 6.5586) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.073 (-0.137, 0.283)
+     SE(FECR) : 0.1073
+      p-value : 0.4967
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates
+using a univariate liklihood ratio test:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+          P-value
+momage    0.25696
+momheight 0.12535
+
+
+Covariates selected (P<0.2):
+            P-value
+momheight 0.1253539
+
+-----------------------------------------
+
+NOTE: Dropping SL.glmnet from the library
+because there is only 1 covariate selected and glmnet
+requires 2+ covariates to run
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All
+
+	 Coefficients: 
+	     SL.mean_All    0.3065671 
+	      SL.glm_All    0.6934329 
+	 SL.bayesglm_All    0 
+	      SL.gam_All    0 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All 
+
+	 Coefficients: 
+	     SL.mean_All    0.8322353 
+	      SL.glm_All    0 
+	 SL.bayesglm_All    0 
+	      SL.gam_All    0.1677647 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  3.1384
+   Estimated Variance:  7.6733
+              p-value:  0.25723
+    95% Conf Interval: (-2.291, 8.5677) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  2.9072
+   Estimated Variance:  10.28
+              p-value:  0.36455
+    95% Conf Interval: (-3.377, 9.1914) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  3.1332
+   Estimated Variance:  7.6258
+              p-value:  0.25654
+    95% Conf Interval: (-2.2793, 8.5457) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.122 (-0.106, 0.349)
+     SE(FECR) : 0.1160
+      p-value : 0.2939
+-----------------------------------------
+[1] "Variables that have <30observations when stratified by floor were removed from covariates list:"
+ [1] "month"       "sex"         "electricity" "radio"       "television" 
+ [6] "mobile"      "clock"       "bicycle"     "motorcycle"  "stove"      
+[11] "gascook"    
+
+Likelihood Ratio Test P-values:
+             P-value
+tr           0.26412
+quarter      0.14995
+childage_sth 0.78621
+momage       0.90242
+momedu       0.02296
+momheight    0.14152
+Ncomp        0.48346
+HHS          0.04880
+Nlt18        0.28942
+
+
+Covariates selected (P<0.2):
+             P-value
+quarter   0.14995243
+momedu    0.02295573
+momheight 0.14152020
+HHS       0.04879502
+[1] "3 rows dropped due to missing data"
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~ 1
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~ 1 
+
+	 Coefficients: 
+	      SL.glm_All    1 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  1.3649
+   Estimated Variance:  5.1699
+              p-value:  0.54831
+    95% Conf Interval: (-3.0916, 5.8214) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  1.1136
+   Estimated Variance:  6.6691
+              p-value:  0.66632
+    95% Conf Interval: (-3.9481, 6.1752) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  1.3673
+   Estimated Variance:  5.0348
+              p-value:  0.54228
+    95% Conf Interval: (-3.0306, 5.7652) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.047 (-0.107, 0.201)
+     SE(FECR) : 0.0786
+      p-value : 0.5497
+-----------------------------------------
+
+-----------------------------------------
+Pre-screening the adjustment covariates
+using a univariate liklihood ratio test:
+-----------------------------------------
+
+Likelihood Ratio Test P-values:
+                        P-value
+momheight               0.10980
+quarterQ3               0.84872
+quarterQ4               0.09140
+momeduIncompletePrimary 0.01712
+momeduPrimary           0.28122
+HHS1                    0.04632
+
+
+Covariates selected (P<0.2):
+                           P-value
+momheight               0.10979535
+quarterQ4               0.09140153
+momeduIncompletePrimary 0.01711909
+HHS1                    0.04631596
+
+-----------------------------------------
+Error in lognet(x, is.sparse, ix, jx, y, weights, offset, alpha, nobs,  : 
+  one multinomial or binomial class has 1 or 0 observations; not allowed
+Error in lognet(x, is.sparse, ix, jx, y, weights, offset, alpha, nobs,  : 
+  one multinomial or binomial class has 1 or 0 observations; not allowed
+Error in lognet(x, is.sparse, ix, jx, y, weights, offset, alpha, nobs,  : 
+  one multinomial or binomial class has 1 or 0 observations; not allowed
+Error in lognet(x, is.sparse, ix, jx, y, weights, offset, alpha, nobs,  : 
+  one multinomial or binomial class has 1 or 0 observations; not allowed
+Error in lognet(x, is.sparse, ix, jx, y, weights, offset, alpha, nobs,  : 
+  one multinomial or binomial class has 1 or 0 observations; not allowed
+Error in y %*% rep(1, nc) : non-conformable arguments
+
+-----------------------------------------
+Estimation Results:
+-----------------------------------------
+ Initial estimation of Q
+	 Procedure: SuperLearner
+	 Model:
+		 Y ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All + SL.glmnet_All
+
+	 Coefficients: 
+	     SL.mean_All    0.4116493 
+	      SL.glm_All    0 
+	 SL.bayesglm_All    0.5883507 
+	      SL.gam_All    0 
+	   SL.glmnet_All    0 
+
+ Estimation of g (treatment mechanism)
+	 Procedure: SuperLearner 
+	 Model:
+		 A ~  SL.mean_All + SL.glm_All + SL.bayesglm_All + SL.gam_All + SL.glmnet_All 
+
+	 Coefficients: 
+	     SL.mean_All    1 
+	      SL.glm_All    0 
+	 SL.bayesglm_All    0 
+	      SL.gam_All    0 
+	   SL.glmnet_All    0 
+
+ Estimation of g.Z (intermediate variable assignment mechanism)
+	 Procedure: No intermediate variable 
+
+ Estimation of g.Delta (missingness mechanism)
+	 Procedure: No missingness 
+
+ Bounds on g: ( 0.025 0.975 )
+
+ Additive Effect
+   Parameter Estimate:  1.1644
+   Estimated Variance:  4.7647
+              p-value:  0.59373
+    95% Conf Interval: (-3.1139, 5.4427) 
+
+ Additive Effect among the Treated
+   Parameter Estimate:  1.1785
+   Estimated Variance:  4.7204
+              p-value:  0.58754
+    95% Conf Interval: (-3.08, 5.4369) 
+
+ Additive Effect among the Controls
+   Parameter Estimate:  1.1644
+   Estimated Variance:  4.7704
+              p-value:  0.59395
+    95% Conf Interval: (-3.1165, 5.4453) 
+
+-----------------------------------------
+
+-----------------------------------------
+Estimating the fecal egg count reduction
+(FECR) proportion = (EY1/EY0) - 1
+from TMLE results using arithmetic means
+and the delta method (for a ratio of means)
+-----------------------------------------
+
+-----------------------------------------
+Fecal egg count reduction (EY1/EY0)-1,
+estimated using arithmetic means
+-----------------------------------------
+FECR (95% CI) : 0.040 (-0.108, 0.188)
+     SE(FECR) : 0.0754
+      p-value : 0.5944
+-----------------------------------------
+> 
+> k_tmle_results = bind_rows(k_tmle_results_list)
+> 
+> 
+> #-------------------------------------------------------------------------------
+> # Combine results
+> #-------------------------------------------------------------------------------
+> results = bind_rows(b_glm_results, k_glm_results, b_tmle_results, k_tmle_results)
+> 
+> saveRDS(results, file = fecr_results_path)
+> 
+> 
+> proc.time()
+   user  system elapsed 
+ 29.874   0.947  54.872 

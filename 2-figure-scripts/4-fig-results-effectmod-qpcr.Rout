@@ -1,0 +1,370 @@
+
+R version 3.6.1 (2019-07-05) -- "Action of the Toes"
+Copyright (C) 2019 The R Foundation for Statistical Computing
+Platform: x86_64-apple-darwin15.6.0 (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> #######################################
+> # WASH Benefits STH finished floor analysis
+> 
+> # plot results for association
+> # between improved floors and STH/giardia
+> 
+> # stratify by effect modifiers 
+> # qPCR outcomes, adjusted GLM models
+> #######################################
+> rm(list=ls())
+> 
+> # configure directories, load libraries and base functions
+> source(paste0(here::here(), "/0-config.R"))
+here() starts at /Users/jadederong/Documents/CRG/wash-benefits/washb-floors-public
+
+Attaching package: ‘dplyr’
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+
+Attaching package: ‘reshape2’
+
+The following object is masked from ‘package:tidyr’:
+
+    smiths
+
+
+Attaching package: ‘gridExtra’
+
+The following object is masked from ‘package:dplyr’:
+
+    combine
+
+Welcome to the washb package
+Version: 0.2.2
+Created on 2018-11-07
+
+This software was developed with funding from the
+Bill & Melinda Gates Foundation (grant number OPPGD759).
+
+The package's reference manual and vignette are also online:
+https://ben-arnold.github.io/washb
+
+Loading required package: nnls
+Super Learner
+Version: 2.0-24
+Package created on 2018-08-10
+
+Loading required package: zoo
+
+Attaching package: ‘zoo’
+
+The following objects are masked from ‘package:base’:
+
+    as.Date, as.Date.numeric
+
+Loading required package: splines
+Loading required package: foreach
+Loaded gam 1.16.1
+
+Loading required package: Matrix
+
+Attaching package: ‘Matrix’
+
+The following objects are masked from ‘package:tidyr’:
+
+    expand, pack, unpack
+
+Loaded glmnet 2.0-18
+
+Loading required package: MASS
+
+Attaching package: ‘MASS’
+
+The following object is masked from ‘package:dplyr’:
+
+    select
+
+Loading required package: lme4
+
+arm (Version 1.10-1, built: 2018-4-12)
+
+Working directory is /Users/jadederong/Documents/CRG/wash-benefits/washb-floors-public/2-figure-scripts
+
+
+Attaching package: ‘arm’
+
+The following object is masked from ‘package:scales’:
+
+    rescale
+
+
+Attaching package: ‘plotly’
+
+The following object is masked from ‘package:MASS’:
+
+    select
+
+The following object is masked from ‘package:ggplot2’:
+
+    last_plot
+
+The following object is masked from ‘package:stats’:
+
+    filter
+
+The following object is masked from ‘package:graphics’:
+
+    layout
+
+
+Attaching package: ‘data.table’
+
+The following objects are masked from ‘package:reshape2’:
+
+    dcast, melt
+
+The following objects are masked from ‘package:dplyr’:
+
+    between, first, last
+
+── Attaching packages ─────────────────────────────────────── tidyverse 1.3.0 ──
+✔ tibble  2.1.3     ✔ stringr 1.4.0
+✔ readr   1.3.1     ✔ forcats 0.4.0
+✔ purrr   0.3.3     
+── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+✖ purrr::accumulate()   masks foreach::accumulate()
+✖ data.table::between() masks dplyr::between()
+✖ readr::col_factor()   masks scales::col_factor()
+✖ gridExtra::combine()  masks dplyr::combine()
+✖ purrr::discard()      masks scales::discard()
+✖ Matrix::expand()      masks tidyr::expand()
+✖ plotly::filter()      masks dplyr::filter(), stats::filter()
+✖ data.table::first()   masks dplyr::first()
+✖ dplyr::lag()          masks stats::lag()
+✖ data.table::last()    masks dplyr::last()
+✖ Matrix::pack()        masks tidyr::pack()
+✖ plotly::select()      masks MASS::select(), dplyr::select()
+✖ purrr::transpose()    masks data.table::transpose()
+✖ Matrix::unpack()      masks tidyr::unpack()
+✖ purrr::when()         masks foreach::when()
+
+Attaching package: ‘assertthat’
+
+The following object is masked from ‘package:tibble’:
+
+    has_name
+
+Welcome to the tmle package, version 1.3.0-2
+
+Use tmleNews() to see details on changes and bug fixes
+> 
+> results = readRDS(strat_results_path) %>%
++   mutate(outcome = case_when(
++     yname == "ascaris_yn" ~ "A. lumbricoides",
++     yname == "pos.Al.qpcr" ~ "A. lumbricoides",
++     yname == "positive.Al" ~ "A. lumbricoides",
++     yname == "positive.Ac" ~ "A. ceylanicum",
++     yname == "positive.Na" ~ "N. americanus",
++     yname == "giardia_yn" ~ "G. duodenalis",
++     yname == "posgi" ~ "G. duodenalis",
++     yname == "hwkk" ~ "Hookworm",
++     yname == "pos.Hw.qpcr" ~ "Hookworm",
++     yname == "positive.Hw" ~ "Any hookworm",
++     yname == "ttkk" ~ "T. trichiura",
++     yname == "pos.Tt.qpcr" ~ "T. trichiura",
++     yname == "positive.Tt" ~ "T. trichiura",
++     yname == "sth_yn" ~ "Any STH",
++     yname == "pos.STH.qpcr" ~ "Any STH",
++     yname == "positive.STH" ~ "Any STH"
++   )) %>%
++   mutate(outcome = factor(outcome, levels = c(
++     "G. duodenalis", "Any STH", "T. trichiura",
++   "Hookworm","Any hookworm",  "N. americanus", "A. ceylanicum", "A. lumbricoides"
++   ))) %>%
++   mutate(diagnostic = case_when(
++     yname == "ascaris_yn" ~ "Kato-Katz",
++     yname == "pos.Al.qpcr" ~ "qPCR",
++     yname == "positive.Al" ~ "qPCR",
++     yname == "positive.Ac" ~ "qPCR",
++     yname == "positive.Na" ~ "qPCR",
++     yname == "giardia_yn" ~ "qPCR",
++     yname == "posgi" ~ "qPCR",
++     yname == "hwkk" ~ "Kato-Katz",
++     yname == "pos.Hw.qpcr" ~ "qPCR",
++     yname == "positive.Hw" ~ "qPCR",
++     yname == "ttkk" ~ "Kato-Katz",
++     yname == "pos.Tt.qpcr" ~ "qPCR",
++     yname == "positive.Tt" ~ "qPCR",
++     yname == "sth_yn" ~ "Kato-Katz",
++     yname == "pos.STH.qpcr" ~ "qPCR",
++     yname == "positive.STH" ~ "qPCR"
++   )) %>%
++   filter(!strat %in% c("agecat_t1==0", "agecat_o1==0", "agecat_c1==0")) %>%
++   mutate(strat_label = case_when(
++     strat == "age0_5==1" ~ "Yes",
++     strat == "age0_5==0" ~ "No",
++     strat == "indexchild==1" ~ "Yes",
++     strat == "indexchild==0" ~ "No",
++     strat == "dw==1" ~ "Yes",
++     strat == "dw==0" ~ "No",
++     strat == "implatrine==1" ~ "Yes",
++     strat == "implatrine==0" ~ "No"
++   )) %>%
++   mutate(strat_cat = case_when(
++     strat == "age0_5==1" ~ "Age",
++     strat == "age0_5==0" ~ "Age",
++     strat == "indexchild==1" ~ "Birth cohort",
++     strat == "indexchild==0" ~ "Birth cohort",
++     strat == "dw==1" ~ "Deworming",
++     strat == "dw==0" ~ "Deworming",
++     strat == "implatrine==1" ~ "Improved latrine",
++     strat == "implatrine==0" ~ "Improved latrine"
++   )) %>%
++   mutate(strat = case_when(
++     strat == "age0_5==1" ~ "Less than 5 years",
++     strat == "age0_5==0" ~ "5 years or older",
++     strat == "indexchild==1" ~ "Enrolled in birth cohort",
++     strat == "indexchild==0" ~ "Older child",
++     strat == "dw==1" ~ "Deworming in last 6 months",
++     strat == "dw==0" ~ "No deworming in last 6 months",
++     strat == "implatrine==1" ~ "Improved latrine",
++     strat == "implatrine==0" ~ "No improved latrine"
++   )) %>%
++   # dropping age < 5 cutoff since it's not very 
++   # different from the index child cutoff 
++   filter(strat_cat != "Age")
+> 
+> # drop aberrant OR estimate
+> drops = which(results$yname=="positive.Al" & results$strat_cat=="Deworming" &
++                 results$country=="Bangladesh")
+> results[drops,"IRR"] = NA
+> results[drops,"2.5%"] = NA
+> results[drops,"97.5"] = NA
+> 
+> results_glm = results %>% filter(fit == "GLM" & diagnostic == "qPCR" &
++                                    analysis=="Adjusted") 
+> 
+> 
+> #######################################
+> # make plots
+> #######################################
+> 
+> bplot = function(data, include_x_label, limits = NULL){
++   p = ggplot(data, aes(x = outcome, y = IRR)) + 
++     geom_point(aes(col = strat), position = position_dodge(width = 0.5) ) + 
++     geom_linerange(aes(col = strat, ymin = `2.5%`, ymax = `97.5%`), 
++                    position = position_dodge(width = 0.5)) +
++     facet_grid(~strat_cat) +
++     coord_flip() +
++     geom_hline(yintercept = 1) + 
++     theme_bw() +
++     scale_color_manual(name = "", values = c("#0C5BCD", "#87B8FE")) +
++     scale_shape_discrete(name = "") 
++   
++   
++   if(!is.null(limits)){
++     p = p + scale_y_continuous(limits = c(limits[1], limits[2]),
++                                trans = 'log10', 
++                                breaks = c(0.0625, 0.125, 0.25, .5, 1, 2, 4, 8), 
++                                labels = c("0.063", "0.125", "0.25", "0.5", "1", "2", "4", "8"))
++   } 
++   
++   if(is.null(limits)){
++     p = p +
++       scale_y_continuous(trans = 'log10', 
++                          breaks = c(0.0625, 0.125, 0.25, .5, 1, 2, 4, 8), 
++                          labels = c("0.063", "0.125", "0.25", "0.5", "1", "2", "4", "8"))
++   }   
++   
++   p = p +
++     scale_x_discrete(labels=make_italic) +
++     ylab("Adjusted PR (95% CI)") +
++     xlab("") +
++     theme(legend.position = "bottom",
++           legend.spacing.x = unit(0.01, 'cm'),
++           axis.text.x = element_text(size = 7))  + 
++     guides(col = guide_legend(nrow = 2))
++   
++   if(!include_x_label) p = p + theme(axis.text.y=element_blank(),
++                                      axis.ticks.y=element_blank()) 
++   
++ 
++   
++   return(p)
++ }
+> 
+> #-----------------------------------------
+> # bangladesh age plot
+> #-----------------------------------------
+> p_b_age = bplot(data = results_glm %>% filter(
++   country == "Bangladesh" & strat_cat == "Birth cohort"),
++   include_x_label = T) +
++   theme(plot.margin = unit(c(t = 0.2, r = 0.005, b = 0.1, l = 0.2), "cm")) 
+> 
+> p_b_dw = bplot(data = results_glm %>% filter(
++   country == "Bangladesh" & strat_cat == "Deworming"),
++   include_x_label = F,
++   limits = c(0.1, 6)) +
++   theme(plot.margin = unit(c(t = 0.2, r = 0.005, b = 0.1, l = 0), "cm")) 
+> 
+> p_b_lat = bplot(data = results_glm %>% filter(
++   country == "Bangladesh" & strat_cat == "Improved latrine"),
++   include_x_label = F) +
++   theme(plot.margin = unit(c(t = 0.2, r = 0.2, b = 0.1, l = 0), "cm")) 
+> 
+> p_b = grid.arrange(p_b_age, p_b_dw, p_b_lat, ncol = 3, 
++                  widths = c(3,2.4, 2.4))
+Warning messages:
+1: Removed 2 rows containing missing values (geom_point). 
+2: Removed 2 rows containing missing values (geom_linerange). 
+> 
+> ggsave(filename = paste0(fig_path, "/plot_em_glm_qpcr_b.png"), plot = p_b, 
++        width=9, height=4)
+> 
+> #-----------------------------------------
+> # kenya age plot
+> #-----------------------------------------
+> p_k_age = bplot(data = results_glm %>% filter(
++   country == "Kenya" & strat_cat == "Birth cohort"),
++   include_x_label = T) +
++   theme(plot.margin = unit(c(t = 0.2, r = 0.005, b = 0.1, l = 0.2), "cm")) 
+> 
+> p_k_dw = bplot(data = results_glm %>% filter(
++   country == "Kenya" & strat_cat == "Deworming"),
++   include_x_label = F) +
++   theme(plot.margin = unit(c(t = 0.2, r = 0.005, b = 0.1, l = 0), "cm")) 
+> 
+> p_k_lat = bplot(data = results_glm %>% filter(
++   country == "Kenya" & strat_cat == "Improved latrine"),
++   include_x_label = F) +
++   theme(plot.margin = unit(c(t = 0.2, r = 0.2, b = 0.1, l = 0), "cm")) 
+> 
+> p_k = grid.arrange(p_k_age, p_k_dw, p_k_lat, ncol = 3, 
++                    widths = c(3,2.4, 2.4))
+> 
+> ggsave(filename = paste0(fig_path, "/plot_em_glm_qpcr_k.png"), plot = p_k, 
++        width=9, height=3)
+> 
+> 
+> 
+> 
+> proc.time()
+   user  system elapsed 
+  8.137   0.645  30.545 

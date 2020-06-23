@@ -1,0 +1,1286 @@
+
+R version 3.6.1 (2019-07-05) -- "Action of the Toes"
+Copyright (C) 2019 The R Foundation for Statistical Computing
+Platform: x86_64-apple-darwin15.6.0 (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+[Previously saved workspace restored]
+
+> #######################################
+> # WASH Benefits STH finished floor analysis - Kenya
+> 
+> # Table 1 summary stats
+> 
+> # Sensitivity analysis trimming by 
+> # extreme propensity score values 
+> #######################################
+> 
+> # configure directories, load libraries and base functions
+> source(paste0(here::here(), "/0-config.R"))
+here() starts at /Users/jadederong/Documents/CRG/wash-benefits/washb-floors-public
+
+Attaching package: ‘ggplot2’
+
+The following object is masked _by_ ‘.GlobalEnv’:
+
+    mean_se
+
+
+Attaching package: ‘dplyr’
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+
+Attaching package: ‘reshape2’
+
+The following object is masked from ‘package:tidyr’:
+
+    smiths
+
+
+Attaching package: ‘gridExtra’
+
+The following object is masked from ‘package:dplyr’:
+
+    combine
+
+Welcome to the washb package
+Version: 0.2.2
+Created on 2018-11-07
+
+This software was developed with funding from the
+Bill & Melinda Gates Foundation (grant number OPPGD759).
+
+The package's reference manual and vignette are also online:
+https://ben-arnold.github.io/washb
+
+
+Attaching package: ‘washb’
+
+The following object is masked _by_ ‘.GlobalEnv’:
+
+    sandwichSE
+
+Loading required package: nnls
+Super Learner
+Version: 2.0-24
+Package created on 2018-08-10
+
+Loading required package: zoo
+
+Attaching package: ‘zoo’
+
+The following objects are masked from ‘package:base’:
+
+    as.Date, as.Date.numeric
+
+Loading required package: splines
+Loading required package: foreach
+Loaded gam 1.16.1
+
+Loading required package: Matrix
+
+Attaching package: ‘Matrix’
+
+The following objects are masked from ‘package:tidyr’:
+
+    expand, pack, unpack
+
+Loaded glmnet 2.0-18
+
+Loading required package: MASS
+
+Attaching package: ‘MASS’
+
+The following object is masked from ‘package:dplyr’:
+
+    select
+
+Loading required package: lme4
+
+arm (Version 1.10-1, built: 2018-4-12)
+
+Working directory is /Users/jadederong/Documents/CRG/wash-benefits/washb-floors-public/3-table-scripts
+
+
+Attaching package: ‘arm’
+
+The following object is masked from ‘package:scales’:
+
+    rescale
+
+
+Attaching package: ‘plotly’
+
+The following object is masked from ‘package:MASS’:
+
+    select
+
+The following object is masked from ‘package:ggplot2’:
+
+    last_plot
+
+The following object is masked from ‘package:stats’:
+
+    filter
+
+The following object is masked from ‘package:graphics’:
+
+    layout
+
+
+Attaching package: ‘data.table’
+
+The following objects are masked from ‘package:reshape2’:
+
+    dcast, melt
+
+The following objects are masked from ‘package:dplyr’:
+
+    between, first, last
+
+── Attaching packages ─────────────────────────────────────── tidyverse 1.3.0 ──
+✔ tibble  2.1.3     ✔ stringr 1.4.0
+✔ readr   1.3.1     ✔ forcats 0.4.0
+✔ purrr   0.3.3     
+── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+✖ purrr::accumulate()   masks foreach::accumulate()
+✖ data.table::between() masks dplyr::between()
+✖ readr::col_factor()   masks scales::col_factor()
+✖ gridExtra::combine()  masks dplyr::combine()
+✖ purrr::discard()      masks scales::discard()
+✖ Matrix::expand()      masks tidyr::expand()
+✖ plotly::filter()      masks dplyr::filter(), stats::filter()
+✖ data.table::first()   masks dplyr::first()
+✖ dplyr::lag()          masks stats::lag()
+✖ data.table::last()    masks dplyr::last()
+✖ Matrix::pack()        masks tidyr::pack()
+✖ plotly::select()      masks MASS::select(), dplyr::select()
+✖ purrr::transpose()    masks data.table::transpose()
+✖ Matrix::unpack()      masks tidyr::unpack()
+✖ purrr::when()         masks foreach::when()
+
+Attaching package: ‘assertthat’
+
+The following object is masked from ‘package:tibble’:
+
+    has_name
+
+Welcome to the tmle package, version 1.3.0-2
+
+Use tmleNews() to see details on changes and bug fixes
+> library(dplyr)
+> library(data.table)
+> 
+> # load data
+> ke <- data.table((readRDS(clean_kdata_path)))
+> 
+> # truncate data to those without potential positivity violations
+> kpred = readRDS(kpred_path)
+> kpred$hhid = as.character(kpred$hhid)
+> 
+> ktrim_lower = min(kpred$pred, na.rm=TRUE) + 0.01
+> ktrim_upper = max(kpred$pred, na.rm=TRUE) - 0.01
+> 
+> kpred_drop = kpred %>% filter(pred<ktrim_lower | pred >ktrim_upper) %>%
++   dplyr::select(hhid) %>% pull()
+> 
+> nrow(ke)
+[1] 9079
+> ke = ke %>% filter(!hhid %in% kpred_drop)
+> nrow(ke)
+[1] 8615
+> 
+> #---------------------------
+> # List and label covariates
+> #---------------------------
+> 
+> # Assign as data table
+> dt <- as.data.table(ke)
+> 
+> # Household level characteristics
+> #----------------------------------------
+> # mom's age
+> #----------------------------------------
+> 
+> row_momage = mean_se_strat(
++   Y_0 = dt$momage[dt$floor == 0],
++   Y_1 = dt$momage[dt$floor == 1],
++   Yname = "Mother's age, years",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 69 observations
+due to missing values in the outcome
+ Final sample size: 8070 
+-----------------------------------------
+        N     Mean       SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 8070 27.04402 6.247444 0.09700046     26.8539    27.23414
+
+-----------------------------------------
+Dropping 5 observations
+due to missing values in the outcome
+ Final sample size: 464 
+-----------------------------------------
+       N     Mean       SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 464 28.60922 6.518351  0.415008     27.7958    29.42264
+> 
+> #----------------------------------------
+> # mom's educ attainment (years)
+> #----------------------------------------
+> dt = dt[, edu_primary := ifelse(momedu=="Primary" | 
++                                   momedu=="IncompletePrimary", 1, 0)]
+> dt = dt[, edu_secondary := ifelse(momedu=="AnySecondary", 1, 0)]
+> dt = dt[, edu_NA := ifelse(is.na(momedu), 1, 0)]
+> dt = dt[, edu_missing := ifelse(momedu=="", 1, 0)]
+> 
+> row_momedu_primary = mean_se_strat(
++   Y_0 = dt$edu_primary[dt$floor == 0],
++   Y_1 = dt$edu_primary[dt$floor == 1],
++   Yname = "At least some primary education",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.7766036 0.4165474 0.006398343   0.7640628   0.7891443
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N      Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.5128205 0.5003705 0.03201433   0.4500724   0.5755686
+> 
+> row_momedu_secondary = mean_se_strat(
++   Y_0 = dt$edu_secondary[dt$floor == 0],
++   Y_1 = dt$edu_secondary[dt$floor == 1],
++   Yname = "At least some secondary education",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N     Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.222782 0.4161388 0.006392244   0.2102532   0.2353108
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N      Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.4871795 0.5003705 0.03201433   0.4244314   0.5499276
+> 
+> row_eduNA = mean_se_strat(
++   Y_0 = dt$edu_NA[dt$floor == 0],
++   Y_1 = dt$edu_NA[dt$floor == 1],
++   Yname = "N/A education",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N Mean SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138    0  0       NaN         NaN         NaN
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N Mean SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 468    0  0       NaN         NaN         NaN
+> 
+> row_edumissing = mean_se_strat(
++   Y_0 = dt$edu_missing[dt$floor == 0],
++   Y_1 = dt$edu_missing[dt$floor == 1],
++   Yname = "Missing",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N Mean SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138    0  0       NaN         NaN         NaN
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N Mean SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 468    0  0       NaN         NaN         NaN
+> 
+> #----------------------------------------
+> # mom's height (cm)
+> #----------------------------------------
+> 
+> row_momheight = mean_se_strat(
++   Y_0 = dt$momheight[dt$floor == 0],
++   Y_1 = dt$momheight[dt$floor == 1],
++   Yname = "Mother's height, cm",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 360 observations
+due to missing values in the outcome
+ Final sample size: 7779 
+-----------------------------------------
+        N     Mean       SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 7779 160.3455 6.028395 0.09652276    160.1563    160.5347
+
+-----------------------------------------
+Dropping 37 observations
+due to missing values in the outcome
+ Final sample size: 432 
+-----------------------------------------
+       N     Mean      SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 432 161.8098 5.91308 0.3915078    161.0425    162.5772
+> 
+> #----------------------------------------
+> # N individuals in HH <=18 yrs
+> #----------------------------------------
+> 
+> row_Nind18 = mean_se_strat(
++   Y_0 = dt$Nlt18[dt$floor == 0],
++   Y_1 = dt$Nlt18[dt$floor == 1],
++   Yname = "# individuals living in compound <=18 yrs",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 3 observations
+due to missing values in the outcome
+ Final sample size: 8136 
+-----------------------------------------
+        N     Mean       SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 8136 3.085914 1.906317 0.02932018    3.028447    3.143382
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N     Mean       SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 3.487179 2.035511 0.1266631     3.23892    3.735439
+> 
+> #----------------------------------------
+> # N individuals in compound
+> #----------------------------------------
+> 
+> row_Nind = mean_se_strat(
++   Y_0 = dt$Ncomp[dt$floor == 0],
++   Y_1 = dt$Ncomp[dt$floor == 1],
++   Yname = "Total individuals living in compound",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N     Mean       SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 8.040428 4.957924 0.07934011    7.884921    8.195934
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N     Mean       SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 7.382479 3.618456 0.2292002    6.933246    7.831711
+> 
+> #----------------------------------------
+> # HFIAS category (binary secure/insecure) -- 1 = secure?
+> #----------------------------------------
+> dt = dt[, foodsecure := ifelse(HHS == 1, 1, 0)]
+> 
+> row_foodsecure = mean_se_strat(
++   Y_0 = dt$foodsecure[dt$floor == 0], 
++   Y_1 = dt$foodsecure[dt$floor == 1],
++   Yname = "Food secure",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.9125092 0.2825703 0.004438878    0.903809   0.9212094
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N      Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.9636752 0.1872972 0.01206938   0.9400192   0.9873312
+> 
+> #----------------------------------------
+> # has electricity
+> #----------------------------------------
+> 
+> row_electricity = mean_se_strat(
++   Y_0 = dt$electricity[dt$floor == 0],
++   Y_1 = dt$electricity[dt$floor == 1],
++   Yname = "Has electricity",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N       Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.06660113 0.3522958 0.005357099  0.05610122  0.07710105
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N      Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.2884615 0.4535317 0.02924922   0.2311331     0.34579
+> 
+> #----------------------------------------
+> # has improved wall materials
+> #----------------------------------------
+> 
+> row_walls = mean_se_strat(
++   Y_0 = dt$wall[dt$floor == 0],
++   Y_1 = dt$wall[dt$floor == 1],
++   Yname = "Has improved wall materials",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N       Mean         SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.00774146 0.08764972 0.001324483 0.005145473  0.01033745
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N      Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.7029915 0.4574293 0.02898999   0.6461711   0.7598118
+> 
+> #----------------------------------------
+> # has improved roof material
+> #----------------------------------------
+> 
+> row_roof = mean_se_strat(
++   Y_0 = dt$roof[dt$floor == 0],
++   Y_1 = dt$roof[dt$floor == 1],
++   Yname = "Has improved roof material",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.6646596 0.4721383 0.007366564   0.6502212   0.6790981
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.9764957 0.1516607 0.009233216   0.9583986   0.9945928
+> 
+> #----------------------------------------
+> # assets
+> #----------------------------------------
+> row_tv = mean_se_strat(
++   Y_0 = dt$television[dt$floor == 0],
++   Y_1 = dt$television[dt$floor == 1],
++   Yname = "Owns >=1 tv",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.1118211 0.4015827 0.006177701  0.09971279   0.1239294
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N      Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.4102564 0.4924065 0.03142097   0.3486713   0.4718415
+> 
+> row_bike = mean_se_strat(
++   Y_0 = dt$bicycle[dt$floor == 0],
++   Y_1 = dt$bicycle[dt$floor == 1],
++   Yname = "Owns >=1 bicycle",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N      Mean       SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.5450971 0.556719 0.008624698   0.5281927   0.5620015
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N      Mean       SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.6431624 0.479579 0.03042583   0.5835278    0.702797
+> 
+> row_moto = mean_se_strat(
++   Y_0 = dt$motorcycle[dt$floor == 0],
++   Y_1 = dt$motorcycle[dt$floor == 1],
++   Yname = "Owns >=1 motorcycle",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.0861391 0.3750575 0.005740546  0.07488763  0.09739057
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N      Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.2457265 0.4309778 0.02728337   0.1922511   0.2992019
+> 
+> row_mobile = mean_se_strat(
++   Y_0 = dt$mobile[dt$floor == 0],
++   Y_1 = dt$mobile[dt$floor == 1],
++   Yname = "Owns >=1 mobile phone",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.8124846 0.4629378 0.007199334   0.7983739   0.8265953
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N      Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.9465812 0.2251078 0.01428657   0.9185795   0.9745829
+> 
+> row_stove = mean_se_strat(
++   Y_0 = dt$stove[dt$floor == 0],
++   Y_1 = dt$stove[dt$floor == 1],
++   Yname = "Has >=1 stove",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.4853772 0.5583513 0.008649217   0.4684248   0.5023297
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N      Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.7264957 0.4462344 0.02859872   0.6704422   0.7825492
+> 
+> row_gascook = mean_se_strat(
++   Y_0 = dt$gascook[dt$floor == 0],
++   Y_1 = dt$gascook[dt$floor == 1],
++   Yname = "Has gas for cooking",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N       Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.01597444 0.2786763 0.004239161 0.007665686   0.0242832
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N      Mean       SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.1111111 0.314606 0.01982154  0.07226089   0.1499613
+> 
+> #----------------------------------------
+> # intervention arm
+> #----------------------------------------
+> dt = dt[, arm_control := ifelse(tr=="Control", 1, 0)]
+> dt = dt[, arm_HW := ifelse(tr=="Handwashing", 1, 0)]
+> dt = dt[, arm_N := ifelse(tr=="Nutrition", 1, 0)]
+> dt = dt[, arm_NWSH := ifelse(tr=="Nutrition + WSH", 1, 0)]
+> dt = dt[, arm_S := ifelse(tr=="Sanitation", 1, 0)]
+> dt = dt[, arm_W := ifelse(tr=="Water", 1, 0)]
+> dt = dt[, arm_WSH := ifelse(tr=="WSH", 1, 0)]
+> dt = dt[, arm_missing := ifelse(tr=="", 1, 0)]
+> 
+> row_arm_control = mean_se_strat(
++   Y_0 = dt$arm_control[dt$floor == 0],
++   Y_1 = dt$arm_control[dt$floor == 1],
++   Yname = "Control",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.2612435 0.4393394 0.006868888   0.2477805   0.2747066
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N      Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.2371795 0.4258084 0.02710137   0.1840608   0.2902982
+> 
+> row_arm_HW = mean_se_strat(
++   Y_0 = dt$arm_HW[dt$floor == 0],
++   Y_1 = dt$arm_HW[dt$floor == 1],
++   Yname = "Handwashing",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.1255837 0.3313999 0.005162969   0.1154643   0.1357031
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N      Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.1047009 0.3064952 0.01991172  0.06567388   0.1437278
+> 
+> row_arm_N = mean_se_strat(
++   Y_0 = dt$arm_N[dt$floor == 0],
++   Y_1 = dt$arm_N[dt$floor == 1],
++   Yname = "Nutrition",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.1161219 0.3203907 0.004976331   0.1063683   0.1258755
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N      Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.1132479 0.3172346 0.02061278  0.07284681   0.1536489
+> 
+> row_arm_NWSH = mean_se_strat(
++   Y_0 = dt$arm_NWSH[dt$floor == 0],
++   Y_1 = dt$arm_NWSH[dt$floor == 1],
++   Yname = "Nutrition + WSH",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N     Mean       SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.129393 0.335655 0.005216193   0.1191692   0.1396167
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N      Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.1388889 0.3462006 0.02235119  0.09508055   0.1826972
+> 
+> row_arm_S = mean_se_strat(
++   Y_0 = dt$arm_S[dt$floor == 0],
++   Y_1 = dt$arm_S[dt$floor == 1],
++   Yname = "Sanitation",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.1265667 0.3325074 0.005178271   0.1164173   0.1367161
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N      Mean        SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.1239316 0.3298561 0.0206992   0.0833612   0.1645021
+> 
+> row_arm_W = mean_se_strat(
++   Y_0 = dt$arm_W[dt$floor == 0],
++   Y_1 = dt$arm_W[dt$floor == 1],
++   Yname = "Water",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N      Mean       SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.1248464 0.330565 0.005162975    0.114727   0.1349658
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N      Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.1730769 0.3787186 0.02448398   0.1250883   0.2210655
+> 
+> row_arm_WSH = mean_se_strat(
++   Y_0 = dt$arm_WSH[dt$floor == 0],
++   Y_1 = dt$arm_WSH[dt$floor == 1],
++   Yname = "Combined WSH",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.1162448 0.3205379 0.004989132   0.1064661   0.1260235
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N      Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.1089744 0.3119405 0.01954713  0.07066199   0.1472867
+> 
+> #----------------------------------------
+> # child mean age, years
+> #----------------------------------------
+> dt$childageyr <- dt$childage_sth/365.25
+> 
+> row_childageyr = mean_se_strat(
++   Y_0 = dt$childageyr[dt$floor == 0],
++   Y_1 = dt$childageyr[dt$floor == 1],
++   Yname = "Child age, years",
++   id_0 = dt$childid[dt$floor == 0],
++   id_1 = dt$childid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 293 observations
+due to missing values in the outcome
+ Final sample size: 7846 
+-----------------------------------------
+        N     Mean       SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 7846 3.584008 2.229596 0.01816026    3.548413    3.619602
+
+-----------------------------------------
+Dropping 23 observations
+due to missing values in the outcome
+ Final sample size: 446 
+-----------------------------------------
+       N     Mean       SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 446 3.726663 2.465171        NA          NA          NA
+> 
+> #----------------------------------------
+> # child age category
+> #----------------------------------------
+> # assert_that(names(table(is.na(dt$agecat)))=="FALSE") # Note 345 missing age values
+> dt = dt[, age_0to5 := ifelse(agecat=="0-5 years", 1, 0)]
+> dt = dt[, age_6to15 := ifelse(agecat =="6-15 years", 1, 0)]
+> 
+> row_child0to5 = mean_se_strat(
++   Y_0 = dt$age_0to5[dt$floor == 0],
++   Y_1 = dt$age_0to5[dt$floor == 1],
++   Yname = "Child's age 0-5 years",
++   id_0 = dt$childid[dt$floor == 0],
++   id_1 = dt$childid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 293 observations
+due to missing values in the outcome
+ Final sample size: 7846 
+-----------------------------------------
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 7846 0.7832016 0.4120904 0.003790918   0.7757714   0.7906318
+
+-----------------------------------------
+Dropping 23 observations
+due to missing values in the outcome
+ Final sample size: 446 
+-----------------------------------------
+       N      Mean        SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 446 0.7556054 0.4302103        NA          NA          NA
+> 
+> # Note BD data has 6-12 years category
+> row_child6to15 = mean_se_strat(
++   Y_0 = dt$age_6to15[dt$floor == 0],
++   Y_1 = dt$age_6to15[dt$floor == 1],
++   Yname = "Child's age 6-15 years",
++   id_0 = dt$childid[dt$floor == 0],
++   id_1 = dt$childid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 293 observations
+due to missing values in the outcome
+ Final sample size: 7846 
+-----------------------------------------
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 7846 0.2167984 0.4120904 0.003790918   0.2093682   0.2242286
+
+-----------------------------------------
+Dropping 23 observations
+due to missing values in the outcome
+ Final sample size: 446 
+-----------------------------------------
+       N      Mean        SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 446 0.2443946 0.4302103        NA          NA          NA
+> 
+> #----------------------------------------
+> # month -- move this to table 2
+> #----------------------------------------
+> 
+> #----------------------------------------
+> # child sex
+> #----------------------------------------
+> assert_that(names(table(is.na(dt$sex)))=="FALSE") # but note that 343 observations have missing sex
+[1] TRUE
+> dt = dt[, sexmale := ifelse(sex=="Male", 1, 0)]
+> dt = dt[, sexfemale := ifelse(sex=="Female", 1, 0)]
+> dt = dt[, sexmissing := ifelse(sex=="missing", 1, 0)]
+> 
+> row_childmale = mean_se_strat(
++   Y_0 = dt$sexmale[dt$floor == 0],
++   Y_1 = dt$sexmale[dt$floor == 1],
++   Yname = "Male, %",
++   id_0 = dt$childid[dt$floor == 0],
++   id_1 = dt$childid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N      Mean       SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.4744409 0.499377 0.005739688   0.4631911   0.4856907
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N     Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.508547 0.5004619 0.02367804   0.4621381    0.554956
+> 
+> row_childfemale = mean_se_strat(
++   Y_0 = dt$sexfemale[dt$floor == 0],
++   Y_1 = dt$sexfemale[dt$floor == 1],
++   Yname = "Female, %",
++   id_0 = dt$childid[dt$floor == 0],
++   id_1 = dt$childid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N     Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.488695 0.4999029 0.005846326   0.4772362   0.5001538
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N      Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.4508547 0.4981113 0.02399061   0.4038331   0.4978763
+> 
+> row_childsexmissing = mean_se_strat(
++   Y_0 = dt$sexmissing[dt$floor == 0],
++   Y_1 = dt$sexmissing[dt$floor == 1],
++   Yname = "missing, %",
++   id_0 = dt$childid[dt$floor == 0],
++   id_1 = dt$childid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N Mean SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138    0  0       NaN         NaN         NaN
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N Mean SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 468    0  0       NaN         NaN         NaN
+> 
+> #----------------------------------------
+> # child type
+> #----------------------------------------
+> dt = dt[, childT1 := ifelse(child_type=="Study child (T1)", 1, 0)]
+> dt = dt[, childO1 := ifelse(child_type=="Older child (O1)", 1, 0)]
+> dt = dt[, childC2 := ifelse(child_type=="Comparison child 2 (C2)", 1, 0)]
+> dt = dt[, childC1 := ifelse(child_type=="Comparison child 1 (C1)", 1, 0)]
+> dt = dt[, child_missing := ifelse(is.na(child_type), 1, 0)]
+> 
+> row_childT1 = mean_se_strat(
++   Y_0 = dt$childT1[dt$floor == 0],
++   Y_1 = dt$childT1[dt$floor == 1],
++   Yname = "Study child",
++   id_0 = dt$childid[dt$floor == 0],
++   id_1 = dt$childid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 5374 observations
+due to missing values in the outcome
+ Final sample size: 2765 
+-----------------------------------------
+        N      Mean        SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 2765 0.5475588 0.4978231        NA          NA          NA
+
+-----------------------------------------
+Dropping 295 observations
+due to missing values in the outcome
+ Final sample size: 174 
+-----------------------------------------
+       N      Mean        SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 174 0.5632184 0.4974188        NA          NA          NA
+> 
+> row_childO1 = mean_se_strat(
++   Y_0 = dt$childO1[dt$floor == 0],
++   Y_1 = dt$childO1[dt$floor == 1],
++   Yname = "Older child",
++   id_0 = dt$childid[dt$floor == 0],
++   id_1 = dt$childid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 5374 observations
+due to missing values in the outcome
+ Final sample size: 2765 
+-----------------------------------------
+        N      Mean       SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 2765 0.4264014 0.494643        NA          NA          NA
+
+-----------------------------------------
+Dropping 295 observations
+due to missing values in the outcome
+ Final sample size: 174 
+-----------------------------------------
+       N      Mean       SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 174 0.4195402 0.494908        NA          NA          NA
+> 
+> row_childC2 = mean_se_strat(
++   Y_0 = dt$childC2[dt$floor == 0],
++   Y_1 = dt$childC2[dt$floor == 1],
++   Yname = "Comparison child 2 (C2)",
++   id_0 = dt$childid[dt$floor == 0],
++   id_1 = dt$childid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 5374 observations
+due to missing values in the outcome
+ Final sample size: 2765 
+-----------------------------------------
+        N Mean SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 2765    0  0       NaN         NaN         NaN
+
+-----------------------------------------
+Dropping 295 observations
+due to missing values in the outcome
+ Final sample size: 174 
+-----------------------------------------
+       N Mean SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 174    0  0        NA          NA          NA
+> 
+> row_childC1 = mean_se_strat(
++   Y_0 = dt$childC1[dt$floor == 0],
++   Y_1 = dt$childC1[dt$floor == 1],
++   Yname = "Comparison child 1 (C1)",
++   id_0 = dt$childid[dt$floor == 0],
++   id_1 = dt$childid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 5374 observations
+due to missing values in the outcome
+ Final sample size: 2765 
+-----------------------------------------
+        N       Mean        SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 2765 0.02603978 0.1592824        NA          NA          NA
+
+-----------------------------------------
+Dropping 295 observations
+due to missing values in the outcome
+ Final sample size: 174 
+-----------------------------------------
+       N       Mean        SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 174 0.01724138 0.1305452        NA          NA          NA
+> 
+> row_childmissing = mean_se_strat(
++   Y_0 = dt$child_missing[dt$floor == 0],
++   Y_1 = dt$child_missing[dt$floor == 1],
++   Yname = "Missing child type data",
++   id_0 = dt$childid[dt$floor == 0],
++   id_1 = dt$childid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 8138 
+-----------------------------------------
+        N      Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 8138 0.6602359 0.4736581 0.01654887   0.6278002   0.6926717
+
+-----------------------------------------
+Dropping 1 observations
+due to missing values in the outcome
+ Final sample size: 468 
+-----------------------------------------
+       N      Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 468 0.6282051 0.4838012 0.03525171   0.5591118   0.6972985
+> 
+> ########################################################
+> # Make tables
+> ########################################################
+> 
+> # Table of household characteristics
+> table = bind_rows(
++   row_momage, row_momedu_primary, row_momedu_secondary, 
++   row_momheight,
++   row_Nind18, row_Nind,
++   row_foodsecure,
++   row_electricity, row_walls, row_roof, 
++   row_tv, row_bike, row_moto, row_mobile, 
++   row_childageyr, row_childmale
++ )
+> 
+> noscale <- c("Mother's age, years", "Mother's height, cm", 
++              "# individuals living in compound <=18 yrs", 
++              "Total individuals living in compound",
++              "Child age, years"
++ )
+> 
+> table <- table %>%
++   mutate(results = if_else(col %in% noscale, 
++       pt.est.f(
++            mean = Mean, 
++            digits = 1,             
++            scale = 1
++           ),
++       pt.est.f(
++         mean = Mean,
++         digits = 1,
++         scale = 100
++       )))
+> 
+> Outcome_list <- c("Mother's age, years", "Mother's height, cm", 
++                   "No education", "At least some primary education", "At least some secondary education",
++                   "# individuals living in compound <=18 yrs", "Total individuals living in compound",
++                   "Food secure",
++                   "Has electricity", "Has improved wall materials", "Has improved roof material", 
++                   "Owns >=1 tv", "Owns >=1 bicycle", "Owns >=1 motorcycle", "Owns >=1 mobile phone",
++                   "Child age, years", "Male, %"
++ )
+> 
+> 
+> # To fix error: Each row of output must be identified by a unique combination of keys.
+> table <- table %>%
++   dplyr::mutate(obs = row_number())
+> 
+> table_wide = table %>% select(col, results, Site) %>%
++   spread(Site, results)
+> 
+> table_wide_N = table %>% dplyr::select(col, N, Site) %>%
++   spread(Site, N) 
+> 
+> assert_that(all(table_wide$Outcome == table_wide_N$Outcome))
+[1] TRUE
+> 
+> table_wide_all=data.frame(cbind(
++   as.character(table_wide$col),
++   table_wide_N$fin, 
++   table_wide$fin, 
++   table_wide_N$unf, 
++   table_wide$unf
++ ))
+> 
+> colnames(table_wide_all) = c(
++   "Variable",
++   "N, finished", "Result, finished",
++   "N, unfinished", "Results, unfinished"
++ )
+> 
+> # Reorder the rows
+> table_wide_all_ordered <- table_wide_all %>%
++   arrange(match(Variable, Outcome_list))
+> 
+> maternal_header = c("Maternal", rep("", 4))
+> edu_header = c("Mother's education", rep("", 4))
+> compound_header = c("Compound", rep("", 4))
+> household_header = c("Household", rep("", 4))
+> arm_header = c("Intervention assignment", rep("", 4))
+> child_header = c("Child", rep("", 4))
+> 
+> names(maternal_header) = colnames(table_wide_all_ordered)
+> names(edu_header) = colnames(table_wide_all_ordered)
+> names(compound_header) = colnames(table_wide_all_ordered)
+> names(household_header) = colnames(table_wide_all_ordered)
+> names(arm_header) = colnames(table_wide_all_ordered)
+> names(child_header) = colnames(table_wide_all_ordered)
+> 
+> table_wide_out = bind_rows(
++   maternal_header, table_wide_all_ordered[1:4,],
++   compound_header, table_wide_all_ordered[5:6,],
++   household_header, table_wide_all_ordered[7:16,],
++   child_header, table_wide_all_ordered[15:16,]
++ )
+There were 20 warnings (use warnings() to see them)
+> 
+> table_ke_full <- table_wide_out
+> 
+> ########################################################
+> # Save tables
+> ########################################################
+> 
+> write.csv(table_ke_full, file=paste0(tab_path, "/table-characteristics-pos-ke.txt"), row.names=FALSE)
+> write.csv(table_ke_full, file=paste0(tab_path, "/table-characteristics-pos-ke.csv"), row.names=FALSE)
+> 
+> 
+> proc.time()
+   user  system elapsed 
+  5.330   0.420  10.326 

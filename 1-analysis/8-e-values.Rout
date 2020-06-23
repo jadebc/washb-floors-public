@@ -1,0 +1,336 @@
+
+R version 3.6.1 (2019-07-05) -- "Action of the Toes"
+Copyright (C) 2019 The R Foundation for Statistical Computing
+Platform: x86_64-apple-darwin15.6.0 (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> #######################################
+> # WASH Benefits STH finished floor analysis
+> 
+> # estimate e-values 
+> #######################################
+> 
+> # configure directories, load libraries and base functions
+> source(paste0(here::here(), "/0-config.R"))
+here() starts at /Users/jadederong/Documents/CRG/wash-benefits/washb-floors-public
+
+Attaching package: ‘dplyr’
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+
+Attaching package: ‘reshape2’
+
+The following object is masked from ‘package:tidyr’:
+
+    smiths
+
+
+Attaching package: ‘gridExtra’
+
+The following object is masked from ‘package:dplyr’:
+
+    combine
+
+Welcome to the washb package
+Version: 0.2.2
+Created on 2018-11-07
+
+This software was developed with funding from the
+Bill & Melinda Gates Foundation (grant number OPPGD759).
+
+The package's reference manual and vignette are also online:
+https://ben-arnold.github.io/washb
+
+Loading required package: nnls
+Super Learner
+Version: 2.0-24
+Package created on 2018-08-10
+
+Loading required package: zoo
+
+Attaching package: ‘zoo’
+
+The following objects are masked from ‘package:base’:
+
+    as.Date, as.Date.numeric
+
+Loading required package: splines
+Loading required package: foreach
+Loaded gam 1.16.1
+
+Loading required package: Matrix
+
+Attaching package: ‘Matrix’
+
+The following objects are masked from ‘package:tidyr’:
+
+    expand, pack, unpack
+
+Loaded glmnet 2.0-18
+
+Loading required package: MASS
+
+Attaching package: ‘MASS’
+
+The following object is masked from ‘package:dplyr’:
+
+    select
+
+Loading required package: lme4
+
+arm (Version 1.10-1, built: 2018-4-12)
+
+Working directory is /Users/jadederong/Documents/CRG/wash-benefits/washb-floors-public/1-analysis
+
+
+Attaching package: ‘arm’
+
+The following object is masked from ‘package:scales’:
+
+    rescale
+
+
+Attaching package: ‘plotly’
+
+The following object is masked from ‘package:MASS’:
+
+    select
+
+The following object is masked from ‘package:ggplot2’:
+
+    last_plot
+
+The following object is masked from ‘package:stats’:
+
+    filter
+
+The following object is masked from ‘package:graphics’:
+
+    layout
+
+
+Attaching package: ‘data.table’
+
+The following objects are masked from ‘package:reshape2’:
+
+    dcast, melt
+
+The following objects are masked from ‘package:dplyr’:
+
+    between, first, last
+
+── Attaching packages ─────────────────────────────────────── tidyverse 1.3.0 ──
+✔ tibble  2.1.3     ✔ stringr 1.4.0
+✔ readr   1.3.1     ✔ forcats 0.4.0
+✔ purrr   0.3.3     
+── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+✖ purrr::accumulate()   masks foreach::accumulate()
+✖ data.table::between() masks dplyr::between()
+✖ readr::col_factor()   masks scales::col_factor()
+✖ gridExtra::combine()  masks dplyr::combine()
+✖ purrr::discard()      masks scales::discard()
+✖ Matrix::expand()      masks tidyr::expand()
+✖ plotly::filter()      masks dplyr::filter(), stats::filter()
+✖ data.table::first()   masks dplyr::first()
+✖ dplyr::lag()          masks stats::lag()
+✖ data.table::last()    masks dplyr::last()
+✖ Matrix::pack()        masks tidyr::pack()
+✖ plotly::select()      masks MASS::select(), dplyr::select()
+✖ purrr::transpose()    masks data.table::transpose()
+✖ Matrix::unpack()      masks tidyr::unpack()
+✖ purrr::when()         masks foreach::when()
+
+Attaching package: ‘assertthat’
+
+The following object is masked from ‘package:tibble’:
+
+    has_name
+
+Welcome to the tmle package, version 1.3.0-2
+
+Use tmleNews() to see details on changes and bug fixes
+> 
+> results = readRDS(main_results_path)
+> bd <- readRDS(clean_bdata_path)
+> ke <- readRDS(clean_kdata_path)
+> 
+> ##################################################################################
+> # Documentation: get_evalue
+> # Usage: get_evalue(RR, lb, ub, rare, measure)
+> # Description: obtain e-value from measure of association and confidence interval 
+> # Formulas from Vanderweele et al., 2017
+> # Args/Options: 
+> #   RR:      value of measure of association 
+> #   lb:      value of lower bound of 95% CI of measure of association 
+> #   ub:      value of upper bound of 95% CI of measure of association 
+> #   rare:    boolean (T/F) indicating whether outcome is rare (<15%)
+> #   measure: character string indicating whether the measure of association is a
+> #            risk ratio (RR) or odds ratio (OR)
+> # 
+> # Returns: e-value of estimate and of confidence interval 
+> # Output: none
+> ##################################################################################
+> get_evalue = function(RR, lb, ub, rare, measure){
++   protective_RR = ifelse(RR < 1, T, F)
++   protective_lb = ifelse(lb < 1, T, F)
++   protective_ub = ifelse(ub < 1, T, F)
++   
++   # formula for rare outcomes (<15%)
++   if((rare & measure=="OR") | measure=="RR"){
++     
++     # protective RR
++     if(protective_RR){
++       RRstar = 1/RR
++       eval = RRstar + sqrt(RRstar * (RRstar - 1))
++       if(protective_ub){
++         ubstar = 1/ub
++         eval_ci = ubstar + sqrt(ubstar *(ubstar-1))
++       }else{
++         eval_ci = 1
++       }
++     }else{
++       # non protective RR 
++       eval = RR + sqrt(RR * (RR-1))
++       if(protective_lb){
++         eval_ci = 1
++       }else{
++         eval_ci = lb + sqrt(lb *(lb-1))
++       }
++     }
++   }
++   
++   # formula for common outcomes (>=15%)
++   if(!rare & measure=="OR"){
++     if(protective_RR){
++       RRstar = 1/sqrt(RR)
++       eval = RRstar + sqrt(RRstar * (RRstar - 1))
++       if(protective_ub){
++         ubstar = 1/sqrt(ub)
++         eval_ci = ubstar + sqrt(ubstar *(ubstar-1))
++       }else{
++         eval_ci = 1
++       }
++     }else{
++       eval = sqrt(RR) + RR + sqrt(sqrt(RR) * (sqrt(RR)-1))
++       if(protective_lb){
++         eval_ci = 1
++       }else{
++         eval_ci = sqrt(lb) + sqrt(sqrt(lb) *(sqrt(lb)-1))
++       }
++     }
++   }
++   
++   out = data.frame(eval = eval, eval_ci = eval_ci)
++   return(out)
++   
++ }
+> 
+> 
+> #-----------------------------------------------
+> # identify which outcomes are rare
+> #-----------------------------------------------
+> bprev = bd %>% dplyr::select(hwkk, ttkk, sth, positive.Al, positive.Na,
++                      positive.Hw, positive.Ac, positive.Ad, positive.Tt,
++                      positive.STH, posgi) %>% 
++   summarise(hwkk = mean(hwkk, na.rm=TRUE),
++             ttkk = mean(ttkk, na.rm=TRUE),
++             sth = mean(sth, na.rm=TRUE),
++             posgi = mean(posgi, na.rm=TRUE),
++             positive.Al = mean(positive.Al, na.rm=TRUE),
++             positive.Na = mean(positive.Na, na.rm=TRUE),
++             positive.Ac = mean(positive.Ac, na.rm=TRUE),
++             positive.Ad = mean(positive.Ad, na.rm=TRUE),
++             positive.Hw = mean(positive.Hw, na.rm=TRUE),
++             positive.Tt = mean(positive.Tt, na.rm=TRUE),
++             positive.STH = mean(positive.STH, na.rm=TRUE)
++             ) %>% melt() %>%
++   dplyr::rename(yname = variable, 
++                 prev = value) %>%
++   mutate(rare = ifelse(prev<0.15, T, F),
++          country = "Bangladesh") %>%
++   dplyr::select(-prev)
+No id variables; using all as measure variables
+> 
+> # only Na is common
+> 
+> kprev = ke %>% dplyr::select(ascaris_yn, sth_yn, pos.Al.qpcr, 
++                              pos.Na.qpcr, pos.Tt.qpcr, pos.STH.qpcr,
++                              giardia_yn) %>% 
++   summarise(ascaris_yn = mean(ascaris_yn, na.rm=TRUE),
++             sth_yn = mean(sth_yn, na.rm=TRUE),
++             pos.Al.qpcr = mean(pos.Al.qpcr, na.rm=TRUE),
++             pos.Na.qpcr = mean(pos.Na.qpcr, na.rm=TRUE),
++             pos.Tt.qpcr = mean(pos.Tt.qpcr, na.rm=TRUE),
++             pos.STH.qpcr = mean(pos.STH.qpcr, na.rm=TRUE),
++             giardia_yn = mean(giardia_yn, na.rm=TRUE)
++   ) %>% melt() %>%
++   dplyr::rename(yname = variable, 
++                 prev = value) %>%
++   mutate(rare = ifelse(prev<0.15, T, F),
++          country = "Kenya") %>%
++   dplyr::select(-prev) 
+No id variables; using all as measure variables
+> 
+> #----------------------------------------------
+> # merge rare indicator onto results
+> #----------------------------------------------
+> results = results %>% mutate(
++   psi = ifelse(fit=="GLM", IRR, psi),
++   lb = ifelse(fit=="GLM", `2.5%`, lb),
++   ub = ifelse(fit=="GLM", `97.5%`, ub)
++ ) %>%
++   dplyr::select(country, yname, analysis, fit, label, psi, lb, ub)
+> 
+> d = left_join(results, bprev, by = c("country", "yname"))
+Warning message:
+Column `yname` joining character vector and factor, coercing into character vector 
+> d = left_join(d, kprev, by = c("country", "yname"))
+Warning message:
+Column `yname` joining character vector and factor, coercing into character vector 
+> 
+> d = d %>% mutate(rare.x = ifelse(is.na(rare.x), rare.y, rare.x)) %>%
++   dplyr::select(-rare.y) %>% dplyr::rename(rare=rare.x)
+> 
+> d = d %>% mutate(measure = case_when(
++   fit=="GLM" ~ "RR",
++   fit=="TMLE" ~ "RR"
++ ))
+> 
+> #----------------------------------------------
+> # obtain e-values
+> #----------------------------------------------
+> d$eval = NA
+> d$eval_ci = NA
+> 
+> for(i in 1:nrow(d)){
++   d$eval[i] = get_evalue(RR = d$psi[i], lb = d$lb[i], ub = d$ub[i], 
++                          rare = d$rare[i], measure = d$measure[i])$eval
++   d$eval_ci[i] = get_evalue(RR = d$psi[i], lb = d$lb[i], ub = d$ub[i], 
++                             rare = d$rare[i], measure = d$measure[i])$eval_ci
++ }
+> 
+> saveRDS(d, paste0(results_path, "evalues.RDS"))
+> 
+> proc.time()
+   user  system elapsed 
+  4.509   0.326  22.473 

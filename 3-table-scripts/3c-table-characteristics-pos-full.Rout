@@ -1,0 +1,247 @@
+
+R version 3.6.1 (2019-07-05) -- "Action of the Toes"
+Copyright (C) 2019 The R Foundation for Statistical Computing
+Platform: x86_64-apple-darwin15.6.0 (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+[Previously saved workspace restored]
+
+> #######################################
+> # WASH Benefits STH finished floor analysis
+> 
+> # Objective: this code generates a full table 1 - joined BD and KE
+> 
+> # Sensitivity analysis trimming by 
+> # extreme propensity score values 
+> #######################################
+> 
+> 
+> # Configure directories, load libraries and base functions
+> source(paste0(here::here(), "/0-config.R"))
+here() starts at /Users/jadederong/Documents/CRG/wash-benefits/washb-floors-public
+
+Attaching package: ‘ggplot2’
+
+The following object is masked _by_ ‘.GlobalEnv’:
+
+    mean_se
+
+
+Attaching package: ‘dplyr’
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+
+Attaching package: ‘reshape2’
+
+The following object is masked from ‘package:tidyr’:
+
+    smiths
+
+
+Attaching package: ‘gridExtra’
+
+The following object is masked from ‘package:dplyr’:
+
+    combine
+
+Welcome to the washb package
+Version: 0.2.2
+Created on 2018-11-07
+
+This software was developed with funding from the
+Bill & Melinda Gates Foundation (grant number OPPGD759).
+
+The package's reference manual and vignette are also online:
+https://ben-arnold.github.io/washb
+
+
+Attaching package: ‘washb’
+
+The following object is masked _by_ ‘.GlobalEnv’:
+
+    sandwichSE
+
+Loading required package: nnls
+Super Learner
+Version: 2.0-24
+Package created on 2018-08-10
+
+Loading required package: zoo
+
+Attaching package: ‘zoo’
+
+The following objects are masked from ‘package:base’:
+
+    as.Date, as.Date.numeric
+
+Loading required package: splines
+Loading required package: foreach
+Loaded gam 1.16.1
+
+Loading required package: Matrix
+
+Attaching package: ‘Matrix’
+
+The following objects are masked from ‘package:tidyr’:
+
+    expand, pack, unpack
+
+Loaded glmnet 2.0-18
+
+Loading required package: MASS
+
+Attaching package: ‘MASS’
+
+The following object is masked from ‘package:dplyr’:
+
+    select
+
+Loading required package: lme4
+
+arm (Version 1.10-1, built: 2018-4-12)
+
+Working directory is /Users/jadederong/Documents/CRG/wash-benefits/washb-floors-public/3-table-scripts
+
+
+Attaching package: ‘arm’
+
+The following object is masked from ‘package:scales’:
+
+    rescale
+
+
+Attaching package: ‘plotly’
+
+The following object is masked from ‘package:MASS’:
+
+    select
+
+The following object is masked from ‘package:ggplot2’:
+
+    last_plot
+
+The following object is masked from ‘package:stats’:
+
+    filter
+
+The following object is masked from ‘package:graphics’:
+
+    layout
+
+
+Attaching package: ‘data.table’
+
+The following objects are masked from ‘package:reshape2’:
+
+    dcast, melt
+
+The following objects are masked from ‘package:dplyr’:
+
+    between, first, last
+
+── Attaching packages ─────────────────────────────────────── tidyverse 1.3.0 ──
+✔ tibble  2.1.3     ✔ stringr 1.4.0
+✔ readr   1.3.1     ✔ forcats 0.4.0
+✔ purrr   0.3.3     
+── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+✖ purrr::accumulate()   masks foreach::accumulate()
+✖ data.table::between() masks dplyr::between()
+✖ readr::col_factor()   masks scales::col_factor()
+✖ gridExtra::combine()  masks dplyr::combine()
+✖ purrr::discard()      masks scales::discard()
+✖ Matrix::expand()      masks tidyr::expand()
+✖ plotly::filter()      masks dplyr::filter(), stats::filter()
+✖ data.table::first()   masks dplyr::first()
+✖ dplyr::lag()          masks stats::lag()
+✖ data.table::last()    masks dplyr::last()
+✖ Matrix::pack()        masks tidyr::pack()
+✖ plotly::select()      masks MASS::select(), dplyr::select()
+✖ purrr::transpose()    masks data.table::transpose()
+✖ Matrix::unpack()      masks tidyr::unpack()
+✖ purrr::when()         masks foreach::when()
+
+Attaching package: ‘assertthat’
+
+The following object is masked from ‘package:tibble’:
+
+    has_name
+
+Welcome to the tmle package, version 1.3.0-2
+
+Use tmleNews() to see details on changes and bug fixes
+> library(dplyr)
+> library(data.table)
+> 
+> # Load in Bangladesh table 
+> bdtable <- read.table(file=paste0(tab_path, "/table-characteristics-pos-bd.txt"), sep = ",", header = TRUE)
+> 
+> # Load in Kenya table
+> ketable <- read.table(file=paste0(tab_path, "/table-characteristics-pos-ke.txt"), sep=",", header = TRUE)
+> 
+> # Merge tables together on variable
+> fulltable1 <- merge(bdtable, ketable, 
++                     by.x="Variable", by.y="Variable", 
++                     all.y=TRUE, all.x=TRUE)
+> 
+> # rename columns
+> colnames(fulltable1) = c(
++   "Variable",
++   "(BD) N, finished", "(BD) Results, finished",
++   "(BD) N, unfinished", "(BD) Results, unfinished",
++   "(KE) N, finished", "(KE) Results, finished",
++   "(KE) N, unfinished", "(KE)Results, unfinished"
++ )
+> 
+> # Resort by variable name
+> full_outcome_list <- c("Maternal",
++                        "Mother's age, years", "Mother's height, cm", 
++                        "At least some primary education", "At least some secondary education",
++                        "Compound",
++                        "# individuals living in compound <=18 yrs", "Total individuals living in compound",
++                        "Household", "Food secure", 
++                        "Has electricity", "Has improved wall materials", "Has improved roof material", 
++                        "Owns >=1 tv", "Owns >=1 bicycle", "Owns >=1 motorcycle", "Owns >=1 mobile phone", 
++                        "Child", "Child age, years", "Male, %"
++ )
+> 
+> fulltable1_ordered <- fulltable1 %>%
++   arrange(match(Variable, full_outcome_list))
+> 
+> # Clear cells with NA, change to blanks
+> fulltable1_ordered <- sapply(fulltable1_ordered, as.character)
+> fulltable1_ordered[is.na(fulltable1_ordered)] <- ""
+> 
+> # Eliminate duplicates on merge
+> fulltable1_ordered <- fulltable1_ordered[!duplicated(fulltable1_ordered),]
+> 
+> fulltable1export <- fulltable1_ordered
+> 
+> ########################################################
+> # Save tables
+> ########################################################
+> 
+> write.csv(fulltable1export, file=paste0(tab_path, "/table-characteristics-pos-full.csv"), row.names=FALSE)
+> 
+> proc.time()
+   user  system elapsed 
+  3.755   0.245   8.250 

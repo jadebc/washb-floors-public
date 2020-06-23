@@ -1,0 +1,794 @@
+
+R version 3.6.1 (2019-07-05) -- "Action of the Toes"
+Copyright (C) 2019 The R Foundation for Statistical Computing
+Platform: x86_64-apple-darwin15.6.0 (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> #######################################
+> # WASH Benefits STH finished floor analysis - Bangladesh
+> 
+> # Table 1 summary stats
+> #######################################
+> 
+> # configure directories, load libraries and base functions
+> source(paste0(here::here(), "/0-config.R"))
+here() starts at /Users/jadederong/Documents/CRG/wash-benefits/washb-floors-public
+
+Attaching package: ‘dplyr’
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+
+Attaching package: ‘reshape2’
+
+The following object is masked from ‘package:tidyr’:
+
+    smiths
+
+
+Attaching package: ‘gridExtra’
+
+The following object is masked from ‘package:dplyr’:
+
+    combine
+
+Welcome to the washb package
+Version: 0.2.2
+Created on 2018-11-07
+
+This software was developed with funding from the
+Bill & Melinda Gates Foundation (grant number OPPGD759).
+
+The package's reference manual and vignette are also online:
+https://ben-arnold.github.io/washb
+
+Loading required package: nnls
+Super Learner
+Version: 2.0-24
+Package created on 2018-08-10
+
+Loading required package: zoo
+
+Attaching package: ‘zoo’
+
+The following objects are masked from ‘package:base’:
+
+    as.Date, as.Date.numeric
+
+Loading required package: splines
+Loading required package: foreach
+Loaded gam 1.16.1
+
+Loading required package: Matrix
+
+Attaching package: ‘Matrix’
+
+The following objects are masked from ‘package:tidyr’:
+
+    expand, pack, unpack
+
+Loaded glmnet 2.0-18
+
+Loading required package: MASS
+
+Attaching package: ‘MASS’
+
+The following object is masked from ‘package:dplyr’:
+
+    select
+
+Loading required package: lme4
+
+arm (Version 1.10-1, built: 2018-4-12)
+
+Working directory is /Users/jadederong/Documents/CRG/wash-benefits/washb-floors-public/3-table-scripts
+
+
+Attaching package: ‘arm’
+
+The following object is masked from ‘package:scales’:
+
+    rescale
+
+
+Attaching package: ‘plotly’
+
+The following object is masked from ‘package:MASS’:
+
+    select
+
+The following object is masked from ‘package:ggplot2’:
+
+    last_plot
+
+The following object is masked from ‘package:stats’:
+
+    filter
+
+The following object is masked from ‘package:graphics’:
+
+    layout
+
+
+Attaching package: ‘data.table’
+
+The following objects are masked from ‘package:reshape2’:
+
+    dcast, melt
+
+The following objects are masked from ‘package:dplyr’:
+
+    between, first, last
+
+── Attaching packages ─────────────────────────────────────── tidyverse 1.3.0 ──
+✔ tibble  2.1.3     ✔ stringr 1.4.0
+✔ readr   1.3.1     ✔ forcats 0.4.0
+✔ purrr   0.3.3     
+── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+✖ purrr::accumulate()   masks foreach::accumulate()
+✖ data.table::between() masks dplyr::between()
+✖ readr::col_factor()   masks scales::col_factor()
+✖ gridExtra::combine()  masks dplyr::combine()
+✖ purrr::discard()      masks scales::discard()
+✖ Matrix::expand()      masks tidyr::expand()
+✖ plotly::filter()      masks dplyr::filter(), stats::filter()
+✖ data.table::first()   masks dplyr::first()
+✖ dplyr::lag()          masks stats::lag()
+✖ data.table::last()    masks dplyr::last()
+✖ Matrix::pack()        masks tidyr::pack()
+✖ plotly::select()      masks MASS::select(), dplyr::select()
+✖ purrr::transpose()    masks data.table::transpose()
+✖ Matrix::unpack()      masks tidyr::unpack()
+✖ purrr::when()         masks foreach::when()
+
+Attaching package: ‘assertthat’
+
+The following object is masked from ‘package:tibble’:
+
+    has_name
+
+Welcome to the tmle package, version 1.3.0-2
+
+Use tmleNews() to see details on changes and bug fixes
+> library(dplyr)
+> library(data.table)
+> 
+> # load data
+> dt <- data.table((readRDS(clean_bdata_path)))
+> 
+> #---------------------------
+> # List and label covariates
+> #---------------------------
+> 
+> # Household level characteristics
+> #----------------------------------------
+> # mom's age
+> #----------------------------------------
+> 
+> row_momage = mean_se_strat(
++   Y_0 = dt$momage[dt$floor == 0],
++   Y_1 = dt$momage[dt$floor == 1],
++   Yname = "Mother's age, years",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 24 observations
+due to missing values in the outcome
+ Final sample size: 6472 
+-----------------------------------------
+        N     Mean       SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 6472 24.31381 5.203562 0.08645052    24.14437    24.48326
+
+-----------------------------------------
+Dropping 2 observations
+due to missing values in the outcome
+ Final sample size: 689 
+-----------------------------------------
+       N     Mean       SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 689 24.17562 5.056045 0.05632782    24.06521    24.28602
+> 
+> #----------------------------------------
+> # mom's educ attainment (years)
+> #----------------------------------------
+> dt = dt[, edu_none := ifelse(momedu=="No education", 1, 0)]
+> dt = dt[, edu_primary := ifelse(momedu=="Primary (1-5y)", 1, 0)]
+> dt = dt[, edu_secondary := ifelse(momedu=="Secondary (>5y)", 1, 0)]
+> 
+> row_momedu_none = mean_se_strat(
++   Y_0 = dt$edu_none[dt$floor == 0],
++   Y_1 = dt$edu_none[dt$floor == 1],
++   Yname = "No education",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean        SD    Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.1753387 0.3802858 0.0008626179   0.1736479   0.1770294
+       N       Mean        SD    Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.04052098 0.1973205 0.0009382572    0.038682  0.04235997
+> 
+> row_momedu_primary = mean_se_strat(
++   Y_0 = dt$edu_primary[dt$floor == 0],
++   Y_1 = dt$edu_primary[dt$floor == 1],
++   Yname = "At least some primary education",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean        SD    Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.3414409 0.4742295 0.0005549896   0.3403531   0.3425287
+       N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.1345876 0.3415297 0.003116354   0.1284795   0.1406956
+> 
+> row_momedu_secondary = mean_se_strat(
++   Y_0 = dt$edu_secondary[dt$floor == 0],
++   Y_1 = dt$edu_secondary[dt$floor == 1],
++   Yname = "At least some secondary education",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.4832204 0.4997568 0.000312918   0.4826071   0.4838338
+       N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.8248915 0.3803352 0.004054612   0.8169444   0.8328385
+> 
+> 
+> #----------------------------------------
+> # mom's height (cm)
+> #----------------------------------------
+> 
+> row_momheight = mean_se_strat(
++   Y_0 = dt$momheight[dt$floor == 0],
++   Y_1 = dt$momheight[dt$floor == 1],
++   Yname = "Mother's height, cm",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+
+-----------------------------------------
+Dropping 21 observations
+due to missing values in the outcome
+ Final sample size: 6475 
+-----------------------------------------
+        N     Mean       SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 6475 150.3765 5.221956 0.003867732    150.3689    150.3841
+
+-----------------------------------------
+Dropping 4 observations
+due to missing values in the outcome
+ Final sample size: 687 
+-----------------------------------------
+       N     Mean       SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 687 151.9688 5.056306 0.03595406    151.8983    152.0392
+> 
+> #----------------------------------------
+> # N individuals in HH <=18 yrs
+> #----------------------------------------
+> 
+> row_Nind18 = mean_se_strat(
++   Y_0 = dt$Nlt18[dt$floor == 0],
++   Y_1 = dt$Nlt18[dt$floor == 1],
++   Yname = "# individuals living in compound <=18 yrs",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N     Mean       SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 1.703048 1.235489 0.01134033    1.680821    1.725275
+       N     Mean       SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 1.703329 1.259274 0.01339111    1.677082    1.729575
+> 
+> #----------------------------------------
+> # N individuals in compound
+> #----------------------------------------
+> 
+> row_Nind = mean_se_strat(
++   Y_0 = dt$Ncomp[dt$floor == 0],
++   Y_1 = dt$Ncomp[dt$floor == 1],
++   Yname = "Total individuals living in compound",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N     Mean       SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 11.81419 6.504321 0.3284602    11.17041    12.45798
+       N     Mean       SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 10.01013 5.988265 0.08949047    9.834729    10.18553
+> 
+> #----------------------------------------
+> # HFIAS category (binary secure/insecure)
+> #----------------------------------------
+> assert_that(names(table(is.na(dt$hfiacat)))=="FALSE") 
+[1] TRUE
+> dt = dt[, foodsecure := ifelse(hfiacat == "Food Secure", 1, 
++                                ifelse(hfiacat == "Food Insecure", 0, 999))]
+> 
+> row_foodsecure = mean_se_strat(
++   Y_0 = dt$foodsecure[dt$floor == 0], 
++   Y_1 = dt$foodsecure[dt$floor == 1],
++   Yname = "Food secure",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean        SD    Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.6560961 0.4750461 0.0003895475   0.6553325   0.6568596
+       N      Mean        SD    Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.9131693 0.2817908 0.0008838048   0.9114371   0.9149016
+> 
+> #----------------------------------------
+> # has electricity
+> #----------------------------------------
+> 
+> row_electricity = mean_se_strat(
++   Y_0 = dt$elec[dt$floor == 0],
++   Y_1 = dt$elec[dt$floor == 1],
++   Yname = "Has electricity",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.5620382 0.4961745 0.003364735   0.5554433   0.5686331
+       N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.8871201 0.3166751 0.002613717   0.8819972    0.892243
+> 
+> #----------------------------------------
+> # has improved wall materials
+> #----------------------------------------
+> 
+> row_walls = mean_se_strat(
++   Y_0 = dt$walls[dt$floor == 0],
++   Y_1 = dt$walls[dt$floor == 1],
++   Yname = "Has improved wall materials",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.7113608 0.4531647 0.00357077   0.7043621   0.7183595
+       N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.9218524 0.2685982 0.001809496   0.9183058    0.925399
+> 
+> #----------------------------------------
+> # has improved roof material
+> #----------------------------------------
+> 
+> row_roof = mean_se_strat(
++   Y_0 = dt$roof[dt$floor == 0],
++   Y_1 = dt$roof[dt$floor == 1],
++   Yname = "Has improved roof material",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.9822968 0.1318805 0.001382973   0.9795862   0.9850074
+       N Mean SD    Robust SE Lower 95%CI Upper 95%CI
+[1,] 691    1  0 7.760106e-15           1           1
+> 
+> #----------------------------------------
+> # assets
+> #----------------------------------------
+> row_wardrobe = mean_se_strat(
++   Y_0 = dt$asset_wardrobe[dt$floor == 0],
++   Y_1 = dt$asset_wardrobe[dt$floor == 1],
++   Yname = "Owns >=1 wardrobe",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean       SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.1140702 0.317921 0.001244535   0.1116309   0.1165095
+       N      Mean       SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.5137482 0.500173 0.006107049   0.5017784    0.525718
+> 
+> row_table = mean_se_strat(
++   Y_0 = dt$asset_table[dt$floor == 0],
++   Y_1 = dt$asset_table[dt$floor == 1],
++   Yname = "Owns >=1 table",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.7185961 0.4497187 0.002562631   0.7135733   0.7236188
+       N      Mean        SD    Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.9117221 0.2839041 0.0008502956   0.9100556   0.9133887
+> 
+> row_chair = mean_se_strat(
++   Y_0 = dt$asset_chair[dt$floor == 0],
++   Y_1 = dt$asset_chair[dt$floor == 1],
++   Yname = "Owns >=1 chair",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.7093596 0.4540928 0.003034154   0.7034127   0.7153065
+       N      Mean      SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.9667149 0.17951 0.007912357   0.9512067   0.9822231
+> 
+> row_khat = mean_se_strat(
++   Y_0 = dt$asset_khat[dt$floor == 0],
++   Y_1 = dt$asset_khat[dt$floor == 1],
++   Yname = "Owns >=1 khat",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.5762007 0.4941974 0.003783206   0.5687857   0.5836158
+       N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.9536903 0.2103072 0.007610774   0.9387732   0.9686074
+> 
+> row_chouki = mean_se_strat(
++   Y_0 = dt$asset_chouki[dt$floor == 0],
++   Y_1 = dt$asset_chouki[dt$floor == 1],
++   Yname = "Owns >=1 chouki",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean       SD    Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.7992611 0.400584 8.228639e-05   0.7990998   0.7994224
+       N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.6092619 0.4882692 0.006153124   0.5972018   0.6213221
+> 
+> row_tv = mean_se_strat(
++   Y_0 = dt$asset_tv[dt$floor == 0],
++   Y_1 = dt$asset_tv[dt$floor == 1],
++   Yname = "Owns >=1 tv",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.2496921 0.4328681 0.005688894   0.2385419   0.2608423
+       N      Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.6975398 0.4596562 0.00746836   0.6829018   0.7121778
+> 
+> row_refrigerator = mean_se_strat(
++   Y_0 = dt$asset_refrig[dt$floor == 0],
++   Y_1 = dt$asset_refrig[dt$floor == 1],
++   Yname = "Owns >=1 fridge",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N       Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.04048645 0.1971124 0.001795038  0.03696818  0.04400473
+       N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.3502171 0.4773834 0.008109223    0.334323   0.3661112
+> 
+> row_bike = mean_se_strat(
++   Y_0 = dt$asset_bike[dt$floor == 0],
++   Y_1 = dt$asset_bike[dt$floor == 1],
++   Yname = "Owns >=1 bicycle",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.3161946 0.4650257 0.003370417   0.3095886   0.3228006
+       N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.3502171 0.4773834 0.002320511   0.3456689   0.3547653
+> 
+> row_moto = mean_se_strat(
++   Y_0 = dt$asset_moto[dt$floor == 0],
++   Y_1 = dt$asset_moto[dt$floor == 1],
++   Yname = "Owns >=1 motorcycle",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N       Mean        SD    Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.04387315 0.2048286 0.0009256306  0.04205892  0.04568739
+       N      Mean       SD    Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.2344428 0.423957 0.0003602238   0.2337368   0.2351489
+> 
+> row_sewmach = mean_se_strat(
++   Y_0 = dt$asset_sewmach[dt$floor == 0],
++   Y_1 = dt$asset_sewmach[dt$floor == 1],
++   Yname = "Owns >=1 sewing machine",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean        SD    Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.0515702 0.2211747 0.0001113552  0.05135194  0.05178845
+       N      Mean        SD    Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.1490593 0.3564049 0.0005570902   0.1479674   0.1501512
+> 
+> row_mobile = mean_se_strat(
++   Y_0 = dt$asset_mobile[dt$floor == 0],
++   Y_1 = dt$asset_mobile[dt$floor == 1],
++   Yname = "Owns >=1 mobile phone",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.8392857 0.3672955 0.003184164   0.8330448   0.8455267
+       N      Mean        SD    Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.9855282 0.1195116 0.0003350919   0.9848714    0.986185
+> 
+> #----------------------------------------
+> # intervention arm
+> #----------------------------------------
+> assert_that(names(table(is.na(dt$tr)))=="FALSE") 
+[1] TRUE
+> dt = dt[, arm_control := ifelse(tr=="Control", 1, 0)]
+> dt = dt[, arm_HW := ifelse(tr=="Handwashing", 1, 0)]
+> dt = dt[, arm_N := ifelse(tr=="Nutrition", 1, 0)]
+> dt = dt[, arm_NWSH := ifelse(tr=="Nutrition + WSH", 1, 0)]
+> dt = dt[, arm_S := ifelse(tr=="Sanitation", 1, 0)]
+> dt = dt[, arm_W := ifelse(tr=="Water", 1, 0)]
+> dt = dt[, arm_WSH := ifelse(tr=="WSH", 1, 0)]
+> dt = dt[, arm_missing := ifelse(tr=="", 1, 0)]
+> 
+> row_arm_control = mean_se_strat(
++   Y_0 = dt$arm_control[dt$floor == 0],
++   Y_1 = dt$arm_control[dt$floor == 1],
++   Yname = "Control",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.2144397 0.4104646 0.001543427   0.2114145   0.2174648
+       N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.1982634 0.3989804 0.001696403   0.1949384   0.2015883
+> 
+> row_arm_HW = mean_se_strat(
++   Y_0 = dt$arm_HW[dt$floor == 0],
++   Y_1 = dt$arm_HW[dt$floor == 1],
++   Yname = "Handwashing",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.1388547 0.3458214 0.000541263   0.1377938   0.1399156
+       N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.1085384 0.3112844 0.002513189   0.1036125   0.1134642
+> 
+> row_arm_N = mean_se_strat(
++   Y_0 = dt$arm_N[dt$floor == 0],
++   Y_1 = dt$arm_N[dt$floor == 1],
++   Yname = "Nutrition",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean       SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.1217672 0.327042 0.00053296   0.1207226   0.1228118
+       N      Mean       SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.1041968 0.305737 0.002412661    0.099468   0.1089256
+> 
+> row_arm_NWSH = mean_se_strat(
++   Y_0 = dt$arm_NWSH[dt$floor == 0],
++   Y_1 = dt$arm_NWSH[dt$floor == 1],
++   Yname = "Nutrition + WSH",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.1273091 0.3333446 0.002264592   0.1228705   0.1317477
+       N      Mean        SD    Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.1534009 0.3606345 0.0006576178   0.1521119   0.1546898
+> 
+> row_arm_S = mean_se_strat(
++   Y_0 = dt$arm_S[dt$floor == 0],
++   Y_1 = dt$arm_S[dt$floor == 1],
++   Yname = "Sanitation",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean        SD    Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.1333128 0.3399387 0.0003860104   0.1325562   0.1340694
+       N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.1534009 0.3606345 0.002236738   0.1490169   0.1577849
+> 
+> row_arm_W = mean_se_strat(
++   Y_0 = dt$arm_W[dt$floor == 0],
++   Y_1 = dt$arm_W[dt$floor == 1],
++   Yname = "Water",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.1334667 0.3401047 0.001670327   0.1301929   0.1367406
+       N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.1505065 0.3578262 0.002303757   0.1459911   0.1550219
+> 
+> row_arm_WSH = mean_se_strat(
++   Y_0 = dt$arm_WSH[dt$floor == 0],
++   Y_1 = dt$arm_WSH[dt$floor == 1],
++   Yname = "Combined WSH",
++   id_0 = dt$hhid[dt$floor == 0],
++   id_1 = dt$hhid[dt$floor == 1]
++ )
+        N      Mean        SD  Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.1308498 0.3372619 0.00208889   0.1267555    0.134944
+       N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.1316932 0.3384019 0.002739376    0.126324   0.1370624
+> 
+> #----------------------------------------
+> # child agecat
+> #----------------------------------------
+> assert_that(names(table(is.na(dt$agecat)))=="FALSE") # Should output TRUE
+[1] TRUE
+> dt = dt[, age_0to5 := ifelse(agecat=="0-5 years", 1, 0)]
+> dt = dt[, age_6to12 := ifelse(agecat =="6-12 years", 1, 0)]
+> 
+> row_child0to5 = mean_se_strat(
++   Y_0 = dt$age_0to5[dt$floor == 0],
++   Y_1 = dt$age_0to5[dt$floor == 1],
++   Yname = "Child's age 0-5 years",
++   id_0 = dt$personid[dt$floor == 0],
++   id_1 = dt$personid[dt$floor == 1]
++ )
+        N      Mean        SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.5854372 0.4926843 0.3690578  -0.1379162    1.308791
+       N      Mean        SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.6150507 0.4869358 0.3595203 -0.08960914     1.31971
+> 
+> # Note KE data has 6-15 years category
+> row_child6to12 = mean_se_strat(
++   Y_0 = dt$age_6to12[dt$floor == 0],
++   Y_1 = dt$age_6to12[dt$floor == 1],
++   Yname = "Child's age 6-12 years",
++   id_0 = dt$personid[dt$floor == 0],
++   id_1 = dt$personid[dt$floor == 1]
++ )
+        N      Mean        SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.4145628 0.4926843 0.3690578  -0.3087905    1.137916
+       N      Mean        SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.3849493 0.4869358 0.3595203  -0.3197104    1.089609
+> 
+> #----------------------------------------
+> # child mean age, years
+> #----------------------------------------
+> 
+> row_childageyr = mean_se_strat(
++   Y_0 = dt$agey[dt$floor == 0],
++   Y_1 = dt$agey[dt$floor == 1],
++   Yname = "Child age, years",
++   id_0 = dt$personid[dt$floor == 0],
++   id_1 = dt$personid[dt$floor == 1]
++ )
+        N     Mean       SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 4.774616 2.764057  1.978323   0.8971033    8.652128
+       N     Mean       SD Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 4.684962 2.824025  1.984539   0.7952657    8.574658
+> 
+> #----------------------------------------
+> # month -- move this to table 2
+> #----------------------------------------
+> 
+> dt$svymonth <- substr(dt$svydate, 3, 5)
+> 
+> #----------------------------------------
+> # child sex
+> #----------------------------------------
+> assert_that(names(table(is.na(dt$sex)))=="FALSE") 
+[1] TRUE
+> dt = dt[, sexmale := ifelse(sex=="male", 1, 0)]
+> 
+> row_childmale = mean_se_strat(
++   Y_0 = dt$sexmale[dt$floor == 0],
++   Y_1 = dt$sexmale[dt$floor == 1],
++   Yname = "Male, %",
++   id_0 = dt$personid[dt$floor == 0],
++   id_1 = dt$personid[dt$floor == 1]
++ )
+        N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 6496 0.4904557 0.4999474 0.006493629   0.4777282   0.5031832
+       N      Mean        SD   Robust SE Lower 95%CI Upper 95%CI
+[1,] 691 0.4905933 0.5002736 0.004501006   0.4817714   0.4994153
+> 
+> 
+> ########################################################
+> # Make tables
+> ########################################################
+> 
+> # Table of household characteristics
+> table = bind_rows(
++   row_momage, row_momheight, row_momedu_primary, row_momedu_secondary, 
++   row_Nind18, row_Nind,
++   row_foodsecure, 
++   row_electricity, row_walls, row_roof, row_tv, 
++   row_bike, row_moto, row_mobile,
++   row_childageyr, row_childmale
++ )
+> 
+> noscale <- c("Mother's age, years", "Mother's height, cm", 
++              "# individuals living in compound <=18 yrs", 
++              "Total individuals living in compound",
++              "Child age, years"
++ )
+> 
+> table <- table %>%
++   mutate(results = if_else(col %in% noscale, 
++                     pt.est.f(
++                     mean = Mean, 
++                     digits = 1,             
++                     scale = 1
++                            ),
++                     pt.est.f(
++                     mean = Mean,
++                     digits = 1,
++                     scale = 100
++                            )))
+> 
+> 
+> Outcome_list <- c("Mother's age, years", "Mother's height, cm", 
++                   "At least some primary education", "At least some secondary education",  
++   "# individuals living in compound <=18 yrs", "Total individuals living in compound",
++   "Food secure", 
++   "Has electricity", "Has improved wall materials", "Has improved roof material", "Owns >=1 tv", 
++   "Owns >=1 bicycle", "Owns >=1 motorcycle", "Owns >=1 mobile phone",
++   "Child age, years", "Male, %"
++ )
+> 
+> 
+> table <- table %>% 
++   dplyr::mutate(obs = row_number())
+> 
+> table_wide = table %>% select(col, results, Site) %>%
++   spread(Site, results)
+> 
+> table_wide_N = table %>% dplyr::select(col, N, Site) %>%
++   spread(Site, N) 
+> 
+> assert_that(all(table_wide$Outcome == table_wide_N$Outcome))
+[1] TRUE
+> 
+> table_wide_all=data.frame(cbind(
++   as.character(table_wide$col),
++   table_wide_N$fin, 
++   table_wide$fin, 
++   table_wide_N$unf, 
++   table_wide$unf
++ ))
+> 
+> colnames(table_wide_all) = c(
++   "Variable",
++   "N, finished", "Result, finished",
++   "N, unfinished", "Results, unfinished"
++ )
+> 
+> # Reorder the rows
+> table_wide_all_ordered <- table_wide_all %>%
++   arrange(match(Variable, Outcome_list))
+> 
+> maternal_header = c("Maternal", rep("", 4))
+> compound_header = c("Compound", rep("", 4))
+> household_header = c("Household", rep("", 4))
+> child_header = c("Child", rep("", 4))
+> 
+> names(maternal_header) = colnames(table_wide_all_ordered)
+> names(compound_header) = colnames(table_wide_all_ordered)
+> names(household_header) = colnames(table_wide_all_ordered)
+> names(child_header) = colnames(table_wide_all_ordered)
+> 
+> table_wide_out = bind_rows(
++   maternal_header, table_wide_all_ordered[1:4,],
++   compound_header, table_wide_all_ordered[5:6,],
++   household_header, table_wide_all_ordered[7:14,],
++   child_header, table_wide_all_ordered[15:16,]
++ )
+There were 20 warnings (use warnings() to see them)
+> 
+> table_bd_full <- table_wide_out
+> 
+> ########################################################
+> # Save tables
+> ########################################################
+> 
+> write.csv(table_bd_full, file=paste0(tab_path, "/table-characteristics-bd.txt"), row.names=FALSE)
+> write.csv(table_bd_full, file=paste0(tab_path, "/table-characteristics-bd.csv"), row.names=FALSE)
+> 
+> proc.time()
+   user  system elapsed 
+  2.797   0.407   3.525 
